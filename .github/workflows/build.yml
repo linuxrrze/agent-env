@@ -112,6 +112,20 @@ jobs:
       # bundled npm/python deps + the herdr binary). Lower severities and
       # CVEs with no available fix are reported but don't block. To relax:
       # drop `--exit-code 1` (report-only) or narrow `--severity`.
+      #
+      # Known, deliberately-accepted exceptions (re-check and remove as the
+      # upstreams land fixes):
+      # - SSH host keys: generated at build time on purpose (stable host-key
+      #   fingerprint across restarts, see Dockerfile) -- the private host
+      #   keys are the expected content of an SSH-server image, not a leak.
+      # - The 4 npm CVEs below: the npm bundled with node 24.20.0 pins
+      #   transitive deps (brace-expansion, ip-address, tar) whose fixes are
+      #   published (>=5.0.9 / >=10.3.1 / >=7.5.22), but fresh npm installs
+      #   are currently broken (@npmcli/docs was unpublished from the
+      #   registry) and in-place `npm install -g npm@...` keeps the old
+      #   pinned versions. Re-check when a Node release bundles a newer npm;
+      #   bump NODE_VERSION in codingenv/.env and drop the entries from
+      #   codingenv/.trivyignore.
       - name: Security scan (Trivy)
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
         run: |
@@ -127,6 +141,8 @@ jobs:
             --ignore-unfixed \
             --exit-code 1 \
             --no-progress \
+            --skip-files '/etc/ssh/ssh_host_.*_key' \
+            --ignorefile codingenv/.trivyignore \
             "$IMAGE:latest"
 
       - name: Push image

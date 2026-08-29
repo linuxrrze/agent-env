@@ -1,0 +1,16 @@
+# Trivy vulnerability-ignore list for the codingenv image
+# (used via --ignorefile in .gitea/workflows/codingenv-rebuild.yml).
+#
+# npm bundled with node 24.20.0 pins transitive deps whose fixes are
+# published upstream (brace-expansion >= 5.0.9, ip-address >= 10.3.1,
+# tar >= 7.5.22), but they are unreachable right now: fresh npm installs
+# are broken (@npmcli/docs was unpublished from the npm registry) and an
+# in-place `npm install -g npm@...` keeps the old pinned versions.
+#
+# Re-check after every NODE_VERSION bump (codingenv/.env): once a Node
+# release bundles an npm with the fixed pins, remove the entries below.
+
+CVE-2026-14257
+CVE-2026-69152
+CVE-2026-69192
+CVE-2026-73566

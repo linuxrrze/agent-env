@@ -48,6 +48,14 @@ npm install -g \
 curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
+# ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
+# unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
+# (e.g. CVE-2026-33818). This image never runs pebble -- its own entrypoint
+# replaces init -- so drop it instead of scanning around it. Re-evaluate (and
+# re-add) if an ubuntu:26.04 point release ships pebble built with Go >= 1.26.6
+# and it becomes load-bearing.
+rm -f /usr/bin/pebble
+
 # --- Sandbox user (remapped at runtime to the host user's id) --------------
 # Some ubuntu base images ship a default `ubuntu` user at uid 1000; drop it so
 # the sandbox user can take that id (no-op on the standard ubuntu image).
@@ -69,6 +77,10 @@ command -v opencode
 command -v herdr
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+# npm keeps a cache of every downloaded tarball under /root/.npm during the
+# global installs above (hundreds of MB). Drop it -- it's regenerated on
+# first use, and the package docs in it trip trivy's secret scanner.
+rm -rf /root/.npm
 chmod +x /entrypoint.sh
 EORUN
 
