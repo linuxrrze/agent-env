@@ -116,8 +116,12 @@ jobs:
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
         run: |
           set -euo pipefail
+          # install.sh (godownloader) defaults BINDIR to ./bin, which would
+          # land in the workspace root and never end up on PATH -- pin it to
+          # $HOME/.local/bin explicitly (exported so the piped `sh` sees it).
+          export BINDIR="$HOME/.local/bin"
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s
-          export PATH="$HOME/.local/bin:$PATH"
+          export PATH="$BINDIR:$PATH"
           trivy image \
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
