@@ -1,0 +1,60 @@
+services:
+  codingenv:
+    image: git.linux-ng.de/marcel/codingenv:latest
+    container_name: codingenv
+    restart: no
+    # NOTE: no `user:` here on purpose. The entrypoint must start as root to
+    # remap the sandbox user to PUID/PGID and to set up sshd, then drops to
+    # your uid for the workload. So `docker compose exec` defaults to root --
+    # use `-u $(id -u):$(id -g)` to act as yourself, or just SSH in.
+    environment:
+      # Where inside the container the mounted home / state dirs live.
+      HOME_DIR: /home/sandbox
+    env_file: .env
+    # Public SSH access (see README). Connect with:  ssh -p 2222 sandbox@<host>
+    ports:
+      - "${SSH_PORT:-2222}:${SSH_PORT:-2222}"
+    build:
+      context: ./docker
+      args:
+        NODE_VERSION: ${NODE_VERSION:-24.20.0}
+        CLAUDE_VERSION: ${CLAUDE_VERSION:-latest}
+        OPENCODE_VERSION: ${OPENCODE_VERSION:-latest}
+        HERDR_VERSION: ${HERDR_VERSION:-0.8.2}
+    volumes:
+      # ================================================================
+      # Option A (recommended): mount your whole host home.
+      # Persists every tool's config/tokens/caches in one shot (they all
+      # live under your home) and lets the sandbox see your real
+      # dotfiles/projects. Change the left side to your actual home, or
+      # export HOST_HOME first. It's already owned by your user, so the
+      # ownership matches PUID/PGID.
+      # ================================================================
+      - ${HOST_HOME:-/home/YOURUSER}:/home/sandbox
+
+      # ================================================================
+      # Option B (minimal): persist ONLY the tool state dirs.
+      # Uncomment these AND comment out Option A if you don't want your
+      # whole home exposed to the sandbox. Each host dir (left side) is
+      # created under ./fs/ (gitignored) and must be owned by your host
+      # user so the sandbox (running as PUID) can write to it.
+      # ================================================================
+      # -- Claude Code (base dir: ~/.claude, relocatable via CLAUDE_CONFIG_DIR)
+      # - ./fs/claude.json:/home/sandbox/.claude.json
+      # - ./fs/claude:/home/sandbox/.claude
+      #
+      # -- opencode (XDG layout: config / data / cache)
+      # - ./fs/opencode/config:/home/sandbox/.config/opencode
+      # - ./fs/opencode/data:/home/sandbox/.local/share/opencode
+      # - ./fs/opencode/cache:/home/sandbox/.cache/opencode
+      #
+      # -- Shared build caches (speed up repeat builds; either option)
+      # - ./fs/npm:/home/sandbox/.npm
+      # - ./fs/pip:/home/sandbox/.cache/pip
+
+    # The container idles by default. Get in and use the tools:
+    #   docker compose exec -u $(id -u):$(id -g) codingenv bash
+    #   ssh -p 2222 sandbox@<host>
+    # or run a tool directly:
+    #   docker compose run --rm codingenv claude
+    #   docker compose run --rm codingenv opencode
