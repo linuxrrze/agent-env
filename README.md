@@ -62,8 +62,20 @@ from the mounted home, so any key you already trust there works:
 ssh -p 2222 sandbox@<host-ip>
 ```
 
-- Host keys are generated at build time, so the fingerprint is stable across
-  restarts.
+- Host keys live in `/var/lib/ssh-keys/` inside the container, which is
+  bind-mounted from `./fs/ssh-keys/` on the host (always-on volume in
+  `docker-compose.yml.sample`, independent of Option A/B). The entrypoint
+  fills in any missing key on start and never regenerates existing ones, so
+  the fingerprint is stable across restarts *and* image upgrades.
+- Do not remove the `./fs/ssh-keys:/var/lib/ssh-keys` volume: without it the
+  keys come from the image itself, i.e. fresh keys on every image upgrade,
+  and clients get "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED" after
+  each one. The host dir is root-owned on purpose (private keys; only
+  root/sshd touch it) — leave its ownership alone.
+- Upgrading from an image built before this scheme changes the host key
+  **once** (the old keys lived in `/etc/ssh` inside the image and are not
+  carried into `./fs/ssh-keys/`): run `ssh-keygen -R <host>` on the client
+  (or clean the known_hosts entry), after which the fingerprint is stable.
 - `~/.ssh` must be `700` and `authorized_keys` `600` (ssh `StrictModes`); a
   normal user home already satisfies this.
 - To (not recommended) allow password logins, set `SSH_PASSWORD_AUTH=yes` in

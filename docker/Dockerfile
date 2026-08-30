@@ -67,10 +67,20 @@ groupadd -g 1000 sandbox
 # '*' means "no password, public key OK" -- exactly what this image wants.
 useradd -m -u 1000 -g sandbox -s /bin/bash -c 'Sandbox user' -p '*' sandbox
 
-# Generate SSH host keys at build time so the host-key fingerprint is stable
-# across container restarts (no "WARNING: REMOTE HOST IDENTIFICATION HAS
-# CHANGED" prompts on the client).
-ssh-keygen -A
+# Generate SSH host keys at build time into a dedicated dir (not /etc/ssh)
+# so it can be bind-mounted for persistence (./fs/ssh-keys in
+# docker-compose.yml.sample): this image is rebuilt on every tool upgrade,
+# and baking fresh keys into /etc/ssh each time is what made clients see
+# "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED" after upgrades. The
+# entrypoint treats these build-time keys as fallback/seed only -- it fills
+# in anything missing and never regenerates existing keys, and it points
+# sshd at this dir via HostKey lines. Types/sizes match what
+# `ssh-keygen -A` generates (OpenSSH 10.x: RSA 3072, ECDSA 256, Ed25519).
+mkdir -p /var/lib/ssh-keys
+chmod 700 /var/lib/ssh-keys
+ssh-keygen -t rsa -b 3072 -N '' -q -f /var/lib/ssh-keys/ssh_host_rsa_key
+ssh-keygen -t ecdsa -b 256 -N '' -q -f /var/lib/ssh-keys/ssh_host_ecdsa_key
+ssh-keygen -t ed25519 -N '' -q -f /var/lib/ssh-keys/ssh_host_ed25519_key
 
 # Sanity: everything we promised to install is actually present.
 node --version

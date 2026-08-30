@@ -56,21 +56,54 @@ if [ "$current_uid" -eq 0 ]; then
   fi
 
   # --- 2. start sshd -------------------------------------------------------
-  # privsep dir (fresh each start -- /run is a tmpfs) + config drop-in. Host
-  # keys were generated at build time (stable fingerprint).
+  # Host keys live in /var/lib/ssh-keys/ -- bind-mounted from the host
+  # (./fs/ssh-keys in docker-compose.yml.sample) so the fingerprint stays
+  # stable across image rebuilds, not just restarts. A bind mount replaces
+  # whatever the image baked into that dir, so on first start (fresh host
+  # dir) there is nothing to seed from: generate any missing key here,
+  # same types/sizes as the build-time seed (OpenSSH 10.x `ssh-keygen -A`:
+  # RSA 3072, ECDSA 256, Ed25519). Existing keys are kept as-is, never
+  # regenerated -- that is the whole point.
+  #
+  # Without the mount this dir holds the image's build-time keys, i.e. the
+  # old behaviour (stable across restarts, fresh keys on each image
+  # upgrade) is preserved.
+  SSH_KEYS_DIR=/var/lib/ssh-keys
+  mkdir -p "$SSH_KEYS_DIR" && chmod 700 "$SSH_KEYS_DIR"
+  generate_host_key() { # $1=key file  $2=type  $3=bits (empty for ed25519)
+    if [ -f "$1" ]; then
+      return 0
+    fi
+    if [ -n "${3:-}" ]; then
+      ssh-keygen -t "$2" -b "$3" -N '' -q -f "$1"
+    else
+      ssh-keygen -t "$2" -N '' -q -f "$1"
+    fi
+  }
+  generate_host_key "${SSH_KEYS_DIR}/ssh_host_rsa_key"     rsa 3072
+  generate_host_key "${SSH_KEYS_DIR}/ssh_host_ecdsa_key"   ecdsa 256
+  generate_host_key "${SSH_KEYS_DIR}/ssh_host_ed25519_key" ed25519
+  # privsep dir (fresh each start -- /run is a tmpfs) + config drop-in.
+  # Declaring HostKey overrides sshd's compiled-in /etc/ssh defaults, and
+  # sshd aborts startup on a HostKey line whose file is missing -- so list
+  # only the keys that actually exist.
   mkdir -p /run/sshd && chmod 755 /run/sshd
-  ssh-keygen -A   # idempotent: fills in any host key missing from the image
-  cat > /etc/ssh/sshd_config.d/60-codingenv.conf << CONF
-Port ${SSH_PORT}
-ListenAddress 0.0.0.0
-PubkeyAuthentication yes
-PasswordAuthentication ${SSH_PASSWORD_AUTH}
-PermitRootLogin no
-AllowUsers ${SBOX_USER}
-UsePAM no
-X11Forwarding no
-AcceptEnv LANG LC_*
-CONF
+  {
+    echo "Port ${SSH_PORT}"
+    echo "ListenAddress 0.0.0.0"
+    echo "PubkeyAuthentication yes"
+    echo "PasswordAuthentication ${SSH_PASSWORD_AUTH}"
+    echo "PermitRootLogin no"
+    echo "AllowUsers ${SBOX_USER}"
+    echo "UsePAM no"
+    echo "X11Forwarding no"
+    echo "AcceptEnv LANG LC_*"
+    for t in rsa ecdsa ed25519; do
+      if [ -f "${SSH_KEYS_DIR}/ssh_host_${t}_key" ]; then
+        echo "HostKey ${SSH_KEYS_DIR}/ssh_host_${t}_key"
+      fi
+    done
+  } > /etc/ssh/sshd_config.d/60-codingenv.conf
   # -e sends sshd's logs to stderr (not syslog) so they show up in
   # `docker logs` / compose logs; the container's stderr is the log sink.
   /usr/sbin/sshd -D -e 2>&1 &

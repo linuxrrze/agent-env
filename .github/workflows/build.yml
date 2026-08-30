@@ -115,9 +115,11 @@ jobs:
       #
       # Known, deliberately-accepted exceptions (re-check and remove as the
       # upstreams land fixes):
-      # - SSH host keys: generated at build time on purpose (stable host-key
-      #   fingerprint across restarts, see Dockerfile) -- the private host
-      #   keys are the expected content of an SSH-server image, not a leak.
+      # - SSH host keys: generated at build time on purpose as a fallback/seed
+      #   for /var/lib/ssh-keys (stable host-key fingerprint when the dir is
+      #   not bind-mounted; see Dockerfile + docker-compose.yml.sample) -- the
+      #   private host keys are the expected content of an SSH-server image,
+      #   not a leak. The '**/ssh_host_*_key' glob matches them at the new path.
       # - The 4 npm CVEs below: the npm bundled with node 24.20.0 pins
       #   transitive deps (brace-expansion, ip-address, tar) whose fixes are
       #   published (>=5.0.9 / >=10.3.1 / >=7.5.22), but fresh npm installs

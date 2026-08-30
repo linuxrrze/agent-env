@@ -52,6 +52,16 @@ services:
       # - ./fs/npm:/home/sandbox/.npm
       # - ./fs/pip:/home/sandbox/.cache/pip
 
+      # --- SSH host keys (always on -- do NOT remove) ----------------------
+      # Persists the sshd host keys so the host-key fingerprint stays stable
+      # across image upgrades. Without this line the keys come from the
+      # image itself, i.e. fresh keys on every rebuild, and clients see
+      # "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED" after each upgrade.
+      # The host dir is created on first start; it is root-owned on purpose
+      # (holds private keys, only root/sshd ever touches it) -- unlike the
+      # other ./fs/ dirs it must NOT be owned by your host user/PUID.
+      - ./fs/ssh-keys:/var/lib/ssh-keys
+
     # /tmp as RAM-backed tmpfs, wiped on every container start. Coding agents
     # churn through scratch files constantly; without this they pile up in
     # the container's writable overlay layer across `docker compose restart`
