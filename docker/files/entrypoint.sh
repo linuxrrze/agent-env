@@ -71,7 +71,9 @@ UsePAM no
 X11Forwarding no
 AcceptEnv LANG LC_*
 CONF
-  /usr/sbin/sshd -D -e >> /var/log/sshd.log 2>&1 &
+  # -e sends sshd's logs to stderr (not syslog) so they show up in
+  # `docker logs` / compose logs; the container's stderr is the log sink.
+  /usr/sbin/sshd -D -e 2>&1 &
   echo "codingenv: sshd listening on port ${SSH_PORT} (user: ${SBOX_USER}, pubkey auth)" >&2
 else
   echo "::warning:: not running as root; cannot remap user id or start sshd. Set the container to run as root (no 'user:' in compose)." >&2
