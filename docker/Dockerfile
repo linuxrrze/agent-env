@@ -61,7 +61,11 @@ rm -f /usr/bin/pebble
 # the sandbox user can take that id (no-op on the standard ubuntu image).
 userdel ubuntu 2>/dev/null || true
 groupadd -g 1000 sandbox
-useradd -m -u 1000 -g sandbox -s /bin/bash -c 'Sandbox user' sandbox
+# -p '*': password DISABLED, not locked. Plain `useradd` leaves the shadow
+# field as '!' (locked), and sshd with `UsePAM no` refuses public-key logins
+# for locked accounts ("User ... not allowed because account is locked").
+# '*' means "no password, public key OK" -- exactly what this image wants.
+useradd -m -u 1000 -g sandbox -s /bin/bash -c 'Sandbox user' -p '*' sandbox
 
 # Generate SSH host keys at build time so the host-key fingerprint is stable
 # across container restarts (no "WARNING: REMOTE HOST IDENTIFICATION HAS

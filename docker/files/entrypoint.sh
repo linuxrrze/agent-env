@@ -38,7 +38,9 @@ if [ "$current_uid" -eq 0 ]; then
       usermod -g "$group_name" "$SBOX_USER"
     fi
   else
-    useradd -m -u "$PUID" -g "$group_name" -s /bin/bash -c 'Sandbox user' "$SBOX_USER"
+    # -p '*': disabled, not locked (a '!' shadow field would block pubkey
+    # logins, see Dockerfile).
+    useradd -m -u "$PUID" -g "$group_name" -s /bin/bash -c 'Sandbox user' -p '*' "$SBOX_USER"
   fi
   # The mounted home is normally already owned by the host user (= PUID); this
   # only matters when no home is mounted (image-owned dir left at uid 1000).
