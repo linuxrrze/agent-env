@@ -141,7 +141,7 @@ jobs:
             --ignore-unfixed \
             --exit-code 1 \
             --no-progress \
-            --skip-files '/etc/ssh/ssh_host_.*_key' \
+            --skip-files '**/ssh_host_*_key' \
             --ignorefile codingenv/.trivyignore \
             "$IMAGE:latest"
 
