@@ -104,6 +104,21 @@ Notes:
 - The npm/pip caches are optional; mounting them just makes repeat
   `npm install` / `pip install` faster.
 
+## /tmp (RAM-backed, wiped on start)
+
+Coding agents write a lot of scratch into `/tmp`. Without special handling
+that scratch would land in the container's writable overlay layer and
+survive `docker compose restart` (growing container size in
+`docker system df`). Two layers of handling:
+
+- `docker-compose.yml.sample` mounts `/tmp` as a **tmpfs** (2G, RAM-backed,
+  wiped on every start -- exactly /tmp semantics). Raise `size` under
+  `tmpfs:` if a single session needs more.
+- If you remove that mount (or bind-mount something else to `/tmp`), the
+  entrypoint still deletes stale `/tmp` contents on each start -- but only
+  when `/tmp` is not a separate mountpoint, so a bind mount you manage is
+  never touched.
+
 ## Build & version tracking
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION` (and `NODE_VERSION`)

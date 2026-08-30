@@ -47,6 +47,14 @@ if [ "$current_uid" -eq 0 ]; then
   chown "$PUID:$PGID" "$HOME_DIR"
   echo "codingenv: remapped '$SBOX_USER' to uid=$PUID gid=$PGID" >&2
 
+  # Wipe stale /tmp from previous container runs, unless /tmp is its own
+  # mount (tmpfs/bind from compose). Without this, agent scratch files would
+  # accumulate in the container's writable overlay layer across restarts.
+  # A user bind-mounted /tmp is a mountpoint and is left untouched.
+  if ! awk '{print $2}' /proc/mounts | grep -qx /tmp; then
+    find /tmp -mindepth 1 -delete 2>/dev/null || true
+  fi
+
   # --- 2. start sshd -------------------------------------------------------
   # privsep dir (fresh each start -- /run is a tmpfs) + config drop-in. Host
   # keys were generated at build time (stable fingerprint).

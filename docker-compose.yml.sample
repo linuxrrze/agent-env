@@ -52,6 +52,14 @@ services:
       # - ./fs/npm:/home/sandbox/.npm
       # - ./fs/pip:/home/sandbox/.cache/pip
 
+    # /tmp as RAM-backed tmpfs, wiped on every container start. Coding agents
+    # churn through scratch files constantly; without this they pile up in
+    # the container's writable overlay layer across `docker compose restart`
+    # (visible as growing container size in `docker system df`). Bump the
+    # size (2g) if a single session can hold more scratch in /tmp.
+    tmpfs:
+      - /tmp:size=2g
+
     # The container idles by default. Get in and use the tools:
     #   docker compose exec -u $(id -u):$(id -g) codingenv bash
     #   ssh -p 2222 sandbox@<host>
