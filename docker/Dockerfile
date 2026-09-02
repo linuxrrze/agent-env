@@ -28,7 +28,7 @@ apt-get install -y --no-install-recommends \
   git openssh-client openssh-server \
   python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel \
   less vim tree jq unzip zip ripgrep fd-find \
-  systemd-standalone-tmpfiles
+  systemd-standalone-tmpfiles tini
 
 # --- Node.js + npm (official prebuilt binary; pinned & self-contained) -----
 # Extracted straight into /usr/local so `npm -g` installs land in
@@ -50,10 +50,10 @@ chmod +x /usr/local/bin/herdr
 
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
-# (e.g. CVE-2026-33818). This image never runs pebble -- its own entrypoint
-# replaces init -- so drop it instead of scanning around it. Re-evaluate (and
-# re-add) if an ubuntu:26.04 point release ships pebble built with Go >= 1.26.6
-# and it becomes load-bearing.
+# (e.g. CVE-2026-33818). This image never runs pebble -- tini (see
+# ENTRYPOINT) is its init instead -- so drop it. Re-evaluate (and re-add) if
+# an ubuntu:26.04 point release ships pebble built with Go >= 1.26.6 and it
+# becomes load-bearing.
 rm -f /usr/bin/pebble
 
 # --- Sandbox user (remapped at runtime to the host user's id) --------------
@@ -89,6 +89,7 @@ python3 --version
 command -v claude
 command -v opencode
 command -v herdr
+command -v tini
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 # npm keeps a cache of every downloaded tarball under /root/.npm during the
@@ -104,5 +105,9 @@ WORKDIR /home/sandbox
 # OpenSSH (see entrypoint; port configurable via SSH_PORT, default 2222)
 EXPOSE 2222
 
-ENTRYPOINT ["/entrypoint.sh"]
+# tini as the PID-1 wrapper: reaps orphaned agent subprocesses (zombies) even
+# for deployments that forget `init: true` in compose. The entrypoint still
+# runs as its direct child, so signal handling and container-stop semantics
+# are unchanged.
+ENTRYPOINT ["tini", "--", "/entrypoint.sh"]
 CMD ["sleep", "infinity"]

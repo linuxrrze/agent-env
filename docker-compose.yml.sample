@@ -3,6 +3,10 @@ services:
     image: git.linux-ng.de/marcel/codingenv:latest
     container_name: codingenv
     restart: no
+    # Belt-and-braces zombie reaping: the image already wraps its entrypoint
+    # in tini, but init: true makes Docker's own init PID 1 as well, which
+    # also covers deployments that override the entrypoint.
+    init: true
     # NOTE: no `user:` here on purpose. The entrypoint must start as root to
     # remap the sandbox user to PUID/PGID and to set up sshd, then drops to
     # your uid for the workload. So `docker compose exec` defaults to root --
