@@ -12,7 +12,7 @@ on:
     branches: [main]
     paths:
       - codingenv/docker/**
-      # .codingenv-version / .env are intentionally excluded -- otherwise CI's
+      # .codingenv-version / .env.sample are intentionally excluded -- otherwise CI's
       # own version-bump commit would re-trigger this workflow.
       - .gitea/workflows/codingenv-rebuild.yml
 
@@ -20,7 +20,7 @@ env:
   REGISTRY: git.linux-ng.de
   IMAGE: git.linux-ng.de/marcel/codingenv
   VERSION_FILE: codingenv/.codingenv-version
-  ENV_FILE: codingenv/.env
+  ENV_FILE: codingenv/.env.sample
 
 jobs:
   check-and-build:
@@ -67,7 +67,7 @@ jobs:
           HERDR_TAG=$(echo "$HERDR_LATEST" | sed 's/^[0-9]\+://' | tr '+' '-')
           TAG="${CLAUDE_TAG}-${OPENCODE_TAG}-${HERDR_TAG}"
 
-          # NODE_VERSION is a manual pin in .env (not CI-tracked) -- honor it
+          # NODE_VERSION is a manual pin in .env.sample (not CI-tracked) -- honor it
           # so a local Node bump isn't silently ignored when a tool update
           # triggers this build.
           NODE_VERSION=$(awk -F= '$1=="NODE_VERSION"{print $2}' "$ENV_FILE" 2>/dev/null); NODE_VERSION=${NODE_VERSION:-24.20.0}
@@ -126,7 +126,7 @@ jobs:
       #   are currently broken (@npmcli/docs was unpublished from the
       #   registry) and in-place `npm install -g npm@...` keeps the old
       #   pinned versions. Re-check when a Node release bundles a newer npm;
-      #   bump NODE_VERSION in codingenv/.env and drop the entries from
+      #   bump NODE_VERSION in codingenv/.env.sample and drop the entries from
       #   codingenv/.trivyignore.
       - name: Security scan (Trivy)
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
@@ -163,7 +163,7 @@ jobs:
             echo "opencode=${{ steps.check.outputs.opencode }}"
             echo "herdr=${{ steps.check.outputs.herdr }}"
           } > "$VERSION_FILE"
-          # keep codingenv/.env (used by docker-compose.yml locally) in sync
+          # keep codingenv/.env.sample (template for the local .env) in sync
           sed -i "s/^CLAUDE_VERSION=.*/CLAUDE_VERSION=${{ steps.check.outputs.claude }}/" "$ENV_FILE"
           sed -i "s/^OPENCODE_VERSION=.*/OPENCODE_VERSION=${{ steps.check.outputs.opencode }}/" "$ENV_FILE"
           sed -i "s/^HERDR_VERSION=.*/HERDR_VERSION=${{ steps.check.outputs.herdr }}/" "$ENV_FILE"

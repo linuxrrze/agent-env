@@ -13,6 +13,7 @@ host (no root-owned litter, no `sudo` needed afterwards).
 ```sh
 cd codingenv
 cp docker-compose.yml.sample docker-compose.yml
+cp .env.sample .env
 ```
 
 Then edit `.env` (and/or `docker-compose.yml`):
@@ -134,13 +135,14 @@ survive `docker compose restart` (growing container size in
 ## Build & version tracking
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION` (and `NODE_VERSION`)
-live in `.env` and are passed to the build. The CI workflow
+live in `.env.sample` (the committed template, copied to `.env` locally)
+and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 
 - checks nightly for new releases of all three tools -- `@anthropic-ai/claude-code`
   and `opencode-ai` on npm, `herdr` on GitHub -- and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
-  CVEs), pushes, and bumps the tracked versions in `.env` +
+  CVEs), pushes, and bumps the tracked versions in `.env.sample` +
   `.codingenv-version` on its own.
 - always rebuilds on a push to `codingenv/docker/` (even without a version
   change).

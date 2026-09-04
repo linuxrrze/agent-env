@@ -7,7 +7,7 @@
 # are broken (@npmcli/docs was unpublished from the npm registry) and an
 # in-place `npm install -g npm@...` keeps the old pinned versions.
 #
-# Re-check after every NODE_VERSION bump (codingenv/.env): once a Node
+# Re-check after every NODE_VERSION bump (codingenv/.env.sample): once a Node
 # release bundles an npm with the fixed pins, remove the entries below.
 
 CVE-2026-14257
