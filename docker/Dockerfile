@@ -27,7 +27,7 @@ apt-get install -y --no-install-recommends \
   build-essential pkg-config \
   git openssh-client openssh-server \
   python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel \
-  less vim tree jq unzip zip ripgrep fd-find \
+  less vim tree jq unzip zip ripgrep fd-find screen \
   systemd-standalone-tmpfiles tini
 
 # --- Node.js + npm (official prebuilt binary; pinned & self-contained) -----
