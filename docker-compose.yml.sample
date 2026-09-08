@@ -28,7 +28,7 @@ services:
         CLAUDE_VERSION: ${CLAUDE_VERSION:-latest}
         OPENCODE_VERSION: ${OPENCODE_VERSION:-latest}
         HERDR_VERSION: ${HERDR_VERSION:-0.9.0}
-        HERDR_WEBUI_VERSION: ${HERDR_WEBUI_VERSION:-0.4.11}
+        HERDR_WEB_REF: ${HERDR_WEB_REF:-a587fd36ca8b02d56672f2c12b3f81189fe9dca2}
     volumes:
       # ================================================================
       # Option A (recommended): mount your whole host home.

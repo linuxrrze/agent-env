@@ -3,7 +3,7 @@ ARG NODE_VERSION=24.20.0
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 ARG HERDR_VERSION=0.9.0
-ARG HERDR_WEBUI_VERSION=0.4.11
+ARG HERDR_WEB_REF=a587fd36ca8b02d56672f2c12b3f81189fe9dca2
 
 # UTF-8 without needing the `locales` package/locale-gen
 ENV LANG=C.UTF-8
@@ -49,14 +49,23 @@ npm install -g \
 curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
-# --- herdr-webui (browser WebUI for herdr sessions), pinned release tarball --
-# amd64. The release tarball ships the `herdr-webui` server plus the
-# `herdr-webui-tui` companion client; install both (no `curl | sh`).
-curl -fsSL "https://github.com/alecuba16/herdr-webui/releases/download/v${HERDR_WEBUI_VERSION}/herdr-webui-linux-x86_64.tar.gz" -o /tmp/herdr-webui.tar.gz
-tar -xzf /tmp/herdr-webui.tar.gz -C /tmp
-install -m 755 /tmp/herdr-webui-linux-x86_64/herdr-webui /usr/local/bin/herdr-webui
-install -m 755 /tmp/herdr-webui-linux-x86_64/herdr-webui-tui /usr/local/bin/herdr-webui-tui
-rm -rf /tmp/herdr-webui.tar.gz /tmp/herdr-webui-linux-x86_64
+# --- herdr-web (mobile-first WebUI for herdr sessions), pinned git ref ------
+# A Node.js app with no release tags, so CI pins it to the default branch's
+# commit SHA (Flavor 3 / netbox-tools pattern). Full clone (not --depth 1) so
+# the pinned SHA stays reachable even if upstream pushes between the check and
+# this build. `npm install` brings the runtime deps (express, ws, and the
+# optional node-pty native module -- build-essential is present above so it
+# compiles; if it fails it's optional and the install still succeeds).
+git clone https://github.com/eyalev/herdr-web /opt/herdr-web
+git -C /opt/herdr-web checkout "${HERDR_WEB_REF}"
+(cd /opt/herdr-web && npm install --omit=dev --no-fund --no-audit)
+rm -rf /opt/herdr-web/.git
+# Expose a `herdr-web` launcher on PATH like the other tools. No config flags:
+# bind/port come from the HERDR_WEB_BIND / HERDR_WEB_PORT env vars (defaults
+# 127.0.0.1:7930). On start it connects to the herdr socket and, via
+# herdr.ensureServer(), brings up a herdr daemon if one isn't already running.
+printf '#!/bin/sh\nexec node /opt/herdr-web/server.js "$@"\n' > /usr/local/bin/herdr-web
+chmod 755 /usr/local/bin/herdr-web
 
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
@@ -99,8 +108,9 @@ python3 --version
 command -v claude
 command -v opencode
 command -v herdr
-command -v herdr-webui
-command -v herdr-webui-tui
+command -v herdr-web
+test -f /opt/herdr-web/server.js
+test -d /opt/herdr-web/node_modules/express
 command -v tini
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
