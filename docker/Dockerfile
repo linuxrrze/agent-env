@@ -2,7 +2,8 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=24.20.0
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
-ARG HERDR_VERSION=0.8.2
+ARG HERDR_VERSION=0.9.0
+ARG HERDR_WEBUI_VERSION=0.4.11
 
 # UTF-8 without needing the `locales` package/locale-gen
 ENV LANG=C.UTF-8
@@ -48,6 +49,15 @@ npm install -g \
 curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
+# --- herdr-webui (browser WebUI for herdr sessions), pinned release tarball --
+# amd64. The release tarball ships the `herdr-webui` server plus the
+# `herdr-webui-tui` companion client; install both (no `curl | sh`).
+curl -fsSL "https://github.com/alecuba16/herdr-webui/releases/download/v${HERDR_WEBUI_VERSION}/herdr-webui-linux-x86_64.tar.gz" -o /tmp/herdr-webui.tar.gz
+tar -xzf /tmp/herdr-webui.tar.gz -C /tmp
+install -m 755 /tmp/herdr-webui-linux-x86_64/herdr-webui /usr/local/bin/herdr-webui
+install -m 755 /tmp/herdr-webui-linux-x86_64/herdr-webui-tui /usr/local/bin/herdr-webui-tui
+rm -rf /tmp/herdr-webui.tar.gz /tmp/herdr-webui-linux-x86_64
+
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
 # (e.g. CVE-2026-33818). This image never runs pebble -- tini (see
@@ -89,6 +99,8 @@ python3 --version
 command -v claude
 command -v opencode
 command -v herdr
+command -v herdr-webui
+command -v herdr-webui-tui
 command -v tini
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
