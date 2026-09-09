@@ -120,6 +120,9 @@ WORKDIR /home/sandbox
 
 # OpenSSH (see entrypoint; port configurable via SSH_PORT, default 2222)
 EXPOSE 2222
+# Herdr Studio web UI (herdr-gui), auto-started by the entrypoint
+# (HERDR_STUDIO_ENABLED, default yes; port via HERDR_STUDIO_PORT, default 8787)
+EXPOSE 8787
 
 # tini as the PID-1 wrapper: reaps orphaned agent subprocesses (zombies) even
 # for deployments that forget `init: true` in compose. The entrypoint still

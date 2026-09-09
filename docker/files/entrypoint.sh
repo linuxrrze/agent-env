@@ -118,6 +118,40 @@ if [ "$current_uid" -ne 0 ] && [ ! -w "$HOME_DIR" ]; then
 fi
 export HOME="$HOME_DIR"
 
+# --- herdr + herdr-gui (Herdr Studio) auto-start ---------------------------
+# Start the herdr background server first (it creates
+# $HOME/.config/herdr/herdr-client.sock, which herdr-gui needs to render
+# sessions), then the Herdr Studio web UI on 0.0.0.0:HERDR_STUDIO_PORT. Run
+# both as the mapped sandbox user (PUID), not root, so the herdr socket lives
+# in the user-owned mounted home and a later `herdr` attach / the studio can
+# use it. Background services: the requested command still runs in the
+# foreground. HERDR_STUDIO_ENABLED=no skips both; default yes.
+HERDR_STUDIO_ENABLED="${HERDR_STUDIO_ENABLED:-yes}"
+HERDR_STUDIO_PORT="${HERDR_STUDIO_PORT:-8787}"
+HERDR_STUDIO_PASSWORD="${HERDR_STUDIO_PASSWORD:-sandbox}"
+HERDR_CLIENT_SOCK="${HOME_DIR}/.config/herdr/herdr-client.sock"
+if [ "${HERDR_STUDIO_ENABLED,,}" = "yes" ]; then
+  if [ "$current_uid" -eq 0 ]; then
+    as_sandbox() { setpriv --reuid="$PUID" --regid="$PGID" --init-groups env HOME="$HOME_DIR" "$@"; }
+  else
+    as_sandbox() { env HOME="$HOME_DIR" "$@"; }
+  fi
+  as_sandbox herdr server >/var/log/herdr-server.log 2>&1 &
+  # Wait for the render socket herdr-gui connects to (bounded, so a herdr
+  # startup failure can never hang the container).
+  for _ in $(seq 1 20); do
+    if [ -S "$HERDR_CLIENT_SOCK" ]; then break; fi
+    sleep 0.5
+  done
+  if [ -S "$HERDR_CLIENT_SOCK" ]; then
+    as_sandbox herdr-gui --host 0.0.0.0 --port "$HERDR_STUDIO_PORT" --password "$HERDR_STUDIO_PASSWORD" \
+      >/var/log/herdr-gui.log 2>&1 &
+    echo "codingenv: herdr-gui (Herdr Studio) on http://0.0.0.0:${HERDR_STUDIO_PORT} (login password: HERDR_STUDIO_PASSWORD, default 'sandbox')" >&2
+  else
+    echo "::warning:: ${HERDR_CLIENT_SOCK} not present; herdr-gui not started (see /var/log/herdr-server.log)" >&2
+  fi
+fi
+
 # No command given -> keep the container alive (docker exec / ssh in).
 if [ "$#" -eq 0 ]; then
   set -- sleep infinity

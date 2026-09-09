@@ -35,11 +35,9 @@ docker compose exec -u $(id -u):$(id -g) codingenv bash
 # or run a tool directly (claude, opencode, herdr and herdr-gui are all on PATH):
 docker compose run --rm codingenv claude
 docker compose run --rm codingenv opencode
-# herdr-gui (Herdr Studio) serves a web UI on 127.0.0.1:8787 by default;
-# bind/port are the HOST / PORT env vars. A non-loopback bind generates a
-# login token printed at startup (HERDR_GUI_PASSWORD sets a fixed one).
-# Publish a port and set HOST=0.0.0.0 to reach it from outside:
-docker compose run --rm -p 8787:8787 -e HOST=0.0.0.0 codingenv herdr-gui
+# herdr-gui (Herdr Studio) auto-starts at container start -- see "Herdr
+# Studio (auto-started)" below. Reach it at http://<host-ip>:8787
+# (password: sandbox).
 ```
 
 ## How the user-id mapping works
@@ -57,8 +55,27 @@ entrypoint can both remap the user id and set up sshd:
   which logs you in as `sandbox` (= your uid) automatically.
 
 The entrypoint reads `PUID`, `PGID` (default `1000`), `HOME_DIR`
-(default `/home/sandbox`), `SSH_PORT` (default `2222`) and
-`SSH_PASSWORD_AUTH` (default `no`).
+(default `/home/sandbox`), `SSH_PORT` (default `2222`),
+`SSH_PASSWORD_AUTH` (default `no`), `HERDR_STUDIO_ENABLED` (default `yes`)
+and `HERDR_STUDIO_PORT` (default `8787`).
+
+## Herdr Studio (auto-started)
+
+At container start, the entrypoint brings up the `herdr` background server
+and, once its render socket (`~/.config/herdr/herdr-client.sock`) is ready,
+starts `herdr-gui` (Herdr Studio, the web UI for herdr sessions) on
+`0.0.0.0:${HERDR_STUDIO_PORT:-8787}` with the login password from
+`HERDR_STUDIO_PASSWORD` (default **`sandbox`**). Both run as your mapped user
+(PUID), so the socket lives in
+your mounted home and a later `herdr` attach works. This is on by default;
+set `HERDR_STUDIO_ENABLED=no` (in `.env`) to skip it. Server/UI logs go to
+`/var/log/herdr-server.log` and `/var/log/herdr-gui.log`.
+
+Reach the studio from another device at `http://<host-ip>:8787` (login
+password: `sandbox` by default, or your `HERDR_STUDIO_PASSWORD`) — the port is
+published in `docker-compose.yml.sample`. Every
+`docker run` / `docker compose` invocation picks it up automatically, since
+the entrypoint starts herdr + the studio before running your command.
 
 ## SSH access
 
