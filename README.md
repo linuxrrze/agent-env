@@ -3,9 +3,9 @@
 A self-hosted **code-development sandbox**: an Ubuntu container with a basic
 **Node.js/npm** and **Python** build environment, the **Claude Code**
 (`claude`) and **opencode** CLIs plus **herdr** (the runtime your coding
-agents live on) and **herdr-web** (a mobile-first web UI for herdr sessions,
-a Node.js app pinned to a git commit) preinstalled, and **OpenSSH** on port
-2222.
+agents live on) and **herdr-studio** (a web UI for herdr sessions — the
+standalone `herdr-gui` binary pinned to a GitHub release) preinstalled, and
+**OpenSSH** on port 2222.
 Your home (or just the tools' state dirs) is bind-mounted in and the sandbox
 runs as **your host user id**, so anything it writes is owned by you on the
 host (no root-owned litter, no `sudo` needed afterwards).
@@ -32,13 +32,14 @@ docker compose up -d                     # start the sandbox (idles + sshd)
 ssh -p 2222 sandbox@<host-ip>            # drop in over SSH, as yourself
 # or via docker (exec defaults to root, so pass your uid:gid):
 docker compose exec -u $(id -u):$(id -g) codingenv bash
-# or run a tool directly (claude, opencode, herdr and herdr-web are all on PATH):
+# or run a tool directly (claude, opencode, herdr and herdr-gui are all on PATH):
 docker compose run --rm codingenv claude
 docker compose run --rm codingenv opencode
-# herdr-web serves a mobile-first web UI on 127.0.0.1:7930 by default; bind
-# and port are the HERDR_WEB_BIND / HERDR_WEB_PORT env vars (no --bind flag).
-# Publish a port and set HERDR_WEB_BIND=0.0.0.0 to reach it from outside:
-docker compose run --rm -p 7930:7930 -e HERDR_WEB_BIND=0.0.0.0 codingenv herdr-web
+# herdr-gui (Herdr Studio) serves a web UI on 127.0.0.1:8787 by default;
+# bind/port are the HOST / PORT env vars. A non-loopback bind generates a
+# login token printed at startup (HERDR_GUI_PASSWORD sets a fixed one).
+# Publish a port and set HOST=0.0.0.0 to reach it from outside:
+docker compose run --rm -p 8787:8787 -e HOST=0.0.0.0 codingenv herdr-gui
 ```
 
 ## How the user-id mapping works
@@ -140,22 +141,22 @@ survive `docker compose restart` (growing container size in
 
 ## Build & version tracking
 
-`CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_WEB_REF`
+`CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`
 (and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 
-- checks nightly for new releases of all four tools -- `@anthropic-ai/claude-code`
-  and `opencode-ai` on npm, `herdr` (GitHub release) and `herdr-web` (latest
-  git commit) -- and when any moves it rebuilds, **scans the image with
-  Trivy** (fails on fixable critical/high CVEs), pushes, and bumps the
-  tracked versions in
+- checks nightly for new releases of all four tools --
+  `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
+  release) and `herdr-studio` (GitHub release) -- and when any moves it
+  rebuilds, **scans the image with Trivy** (fails on fixable critical/high
+  CVEs), pushes, and bumps the tracked versions in
   `.env.sample` + `.codingenv-version` on its own.
 - always rebuilds on a push to `codingenv/docker/` (even without a version
   change).
 
-The image targets **amd64** (the Node tarball and the `herdr` binary are
-pinned for x86_64; `herdr-web` is a platform-neutral Node.js app).
+The image targets **amd64** (the Node tarball and the `herdr` /
+`herdr-gui` binaries are pinned for x86_64).
 
 To rebuild locally:
 

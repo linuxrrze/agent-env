@@ -3,10 +3,13 @@ ARG NODE_VERSION=24.20.0
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 ARG HERDR_VERSION=0.9.0
-ARG HERDR_WEB_REF=a587fd36ca8b02d56672f2c12b3f81189fe9dca2
+ARG HERDR_STUDIO_VERSION=0.5.3
 
 # UTF-8 without needing the `locales` package/locale-gen
 ENV LANG=C.UTF-8
+# herdr-gui ships an in-app self-updater; this image is version-pinned by CI,
+# so disable it to keep the baked-in release intact.
+ENV HERDR_GUI_DISABLE_UPDATE_CHECK=1
 
 COPY files/entrypoint.sh /entrypoint.sh
 
@@ -49,23 +52,15 @@ npm install -g \
 curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
-# --- herdr-web (mobile-first WebUI for herdr sessions), pinned git ref ------
-# A Node.js app with no release tags, so CI pins it to the default branch's
-# commit SHA (Flavor 3 / netbox-tools pattern). Full clone (not --depth 1) so
-# the pinned SHA stays reachable even if upstream pushes between the check and
-# this build. `npm install` brings the runtime deps (express, ws, and the
-# optional node-pty native module -- build-essential is present above so it
-# compiles; if it fails it's optional and the install still succeeds).
-git clone https://github.com/eyalev/herdr-web /opt/herdr-web
-git -C /opt/herdr-web checkout "${HERDR_WEB_REF}"
-(cd /opt/herdr-web && npm install --omit=dev --no-fund --no-audit)
-rm -rf /opt/herdr-web/.git
-# Expose a `herdr-web` launcher on PATH like the other tools. No config flags:
-# bind/port come from the HERDR_WEB_BIND / HERDR_WEB_PORT env vars (defaults
-# 127.0.0.1:7930). On start it connects to the herdr socket and, via
-# herdr.ensureServer(), brings up a herdr daemon if one isn't already running.
-printf '#!/bin/sh\nexec node /opt/herdr-web/server.js "$@"\n' > /usr/local/bin/herdr-web
-chmod 755 /usr/local/bin/herdr-web
+# --- herdr-studio (web UI for herdr sessions), pinned release binary --------
+# A standalone binary (embeds its own runtime; no Node or other deps needed at
+# runtime). amd64: pull the pinned GitHub release tarball (contains herdr-gui
+# + a VERSION file) and install the binary, mirroring how the Node/herdr
+# archives are handled above for reproducibility.
+curl -fsSL "https://github.com/powerfooI/herdr-studio/releases/download/v${HERDR_STUDIO_VERSION}/herdr-gui-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/herdr-studio.tar.xz
+tar -xJf /tmp/herdr-studio.tar.xz -C /tmp herdr-gui-linux-x64/herdr-gui
+install -m 0755 /tmp/herdr-gui-linux-x64/herdr-gui /usr/local/bin/herdr-gui
+rm -rf /tmp/herdr-studio.tar.xz /tmp/herdr-gui-linux-x64
 
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
@@ -108,9 +103,8 @@ python3 --version
 command -v claude
 command -v opencode
 command -v herdr
-command -v herdr-web
-test -f /opt/herdr-web/server.js
-test -d /opt/herdr-web/node_modules/express
+command -v herdr-gui
+herdr-gui --version
 command -v tini
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
