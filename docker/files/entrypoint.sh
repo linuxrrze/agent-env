@@ -132,9 +132,9 @@ HERDR_STUDIO_PASSWORD="${HERDR_STUDIO_PASSWORD:-sandbox}"
 HERDR_CLIENT_SOCK="${HOME_DIR}/.config/herdr/herdr-client.sock"
 if [ "${HERDR_STUDIO_ENABLED,,}" = "yes" ]; then
   if [ "$current_uid" -eq 0 ]; then
-    as_sandbox() { setpriv --reuid="$PUID" --regid="$PGID" --init-groups env HOME="$HOME_DIR" "$@"; }
+    as_sandbox() { setpriv --reuid="$PUID" --regid="$PGID" --init-groups env HOME="$HOME_DIR" SHELL=/bin/bash "$@"; }
   else
-    as_sandbox() { env HOME="$HOME_DIR" "$@"; }
+    as_sandbox() { env HOME="$HOME_DIR" SHELL=/bin/bash "$@"; }
   fi
   as_sandbox herdr server >/var/log/herdr-server.log 2>&1 &
   # Wait for the render socket herdr-gui connects to (bounded, so a herdr
