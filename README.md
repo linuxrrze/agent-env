@@ -3,9 +3,9 @@
 A self-hosted **code-development sandbox**: an Ubuntu container with a basic
 **Node.js/npm** and **Python** build environment, the **Claude Code**
 (`claude`) and **opencode** CLIs plus **herdr** (the runtime your coding
-agents live on) and **herdr-studio** (a web UI for herdr sessions — the
-standalone `herdr-gui` binary pinned to a GitHub release) preinstalled, and
-**OpenSSH** on port 2222.
+agents live on) and **roamgate** (a web UI for herdr sessions — the
+standalone `roamgate` binary, formerly `herdr-studio`/`herdr-gui`, pinned to
+a GitHub release) preinstalled, and **OpenSSH** on port 2222.
 Your home (or just the tools' state dirs) is bind-mounted in and the sandbox
 runs as **your host user id**, so anything it writes is owned by you on the
 host (no root-owned litter, no `sudo` needed afterwards).
@@ -32,11 +32,11 @@ docker compose up -d                     # start the sandbox (idles + sshd)
 ssh -p 2222 sandbox@<host-ip>            # drop in over SSH, as yourself
 # or via docker (exec defaults to root, so pass your uid:gid):
 docker compose exec -u $(id -u):$(id -g) codingenv bash
-# or run a tool directly (claude, opencode, herdr and herdr-gui are all on PATH):
+# or run a tool directly (claude, opencode, herdr and roamgate are all on PATH):
 docker compose run --rm codingenv claude
 docker compose run --rm codingenv opencode
-# herdr-gui (Herdr Studio) auto-starts at container start -- see "Herdr
-# Studio (auto-started)" below. Reach it at http://<host-ip>:8787
+# roamgate (formerly Herdr Studio) auto-starts at container start -- see
+# "roamgate web UI (auto-started)" below. Reach it at http://<host-ip>:8787
 # (password: sandbox).
 ```
 
@@ -59,17 +59,18 @@ The entrypoint reads `PUID`, `PGID` (default `1000`), `HOME_DIR`
 `SSH_PASSWORD_AUTH` (default `no`), `HERDR_STUDIO_ENABLED` (default `yes`)
 and `HERDR_STUDIO_PORT` (default `8787`).
 
-## Herdr Studio (auto-started)
+## roamgate web UI (auto-started)
 
 At container start, the entrypoint brings up the `herdr` background server
 and, once its render socket (`~/.config/herdr/herdr-client.sock`) is ready,
-starts `herdr-gui` (Herdr Studio, the web UI for herdr sessions) on
+starts `roamgate` (the web UI for herdr sessions — formerly Herdr Studio /
+`herdr-gui`) on
 `0.0.0.0:${HERDR_STUDIO_PORT:-8787}` with the login password from
 `HERDR_STUDIO_PASSWORD` (default **`sandbox`**). Both run as your mapped user
 (PUID), so the socket lives in
 your mounted home and a later `herdr` attach works. This is on by default;
 set `HERDR_STUDIO_ENABLED=no` (in `.env`) to skip it. Server/UI logs go to
-`/var/log/herdr-server.log` and `/var/log/herdr-gui.log`.
+`/var/log/herdr-server.log` and `/var/log/roamgate.log`.
 
 Reach the studio from another device at `http://<host-ip>:8787` (login
 password: `sandbox` by default, or your `HERDR_STUDIO_PASSWORD`) — the port is
@@ -165,7 +166,8 @@ to `.env` locally) and are passed to the build. The CI workflow
 
 - checks nightly for new releases of all four tools --
   `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
-  release) and `herdr-studio` (GitHub release) -- and when any moves it
+  release) and roamgate (`powerfooI/roamgate`, formerly `herdr-studio`) --
+  and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
   CVEs), pushes, and bumps the tracked versions in
   `.env.sample` + `.codingenv-version` on its own.
@@ -173,7 +175,7 @@ to `.env` locally) and are passed to the build. The CI workflow
   change).
 
 The image targets **amd64** (the Node tarball and the `herdr` /
-`herdr-gui` binaries are pinned for x86_64).
+`roamgate` binaries are pinned for x86_64).
 
 To rebuild locally:
 

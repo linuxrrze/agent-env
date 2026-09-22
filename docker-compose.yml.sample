@@ -19,7 +19,7 @@ services:
     # SSH_PASSWORD_AUTH -- passed to the container via env_file).
     env_file: .env
     # Public SSH access (see README). Connect with:  ssh -p 2222 sandbox@<host>
-    # The Herdr Studio web UI (herdr-gui) is auto-started by the entrypoint
+    # The roamgate web UI (formerly herdr-studio/herdr-gui) is auto-started by the entrypoint
     # (HERDR_STUDIO_ENABLED=yes, default) and reachable at
     # http://<host>:8787 (login password: HERDR_STUDIO_PASSWORD, default sandbox).
     ports:
@@ -32,7 +32,7 @@ services:
         CLAUDE_VERSION: ${CLAUDE_VERSION:-latest}
         OPENCODE_VERSION: ${OPENCODE_VERSION:-latest}
         HERDR_VERSION: ${HERDR_VERSION:-0.9.0}
-        HERDR_STUDIO_VERSION: ${HERDR_STUDIO_VERSION:-0.5.3}
+        HERDR_STUDIO_VERSION: ${HERDR_STUDIO_VERSION:-0.7.9}
     volumes:
       # ================================================================
       # Option A (recommended): mount your whole host home.

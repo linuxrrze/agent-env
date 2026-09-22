@@ -44,7 +44,9 @@ jobs:
           OPENCODE_LATEST=$(curl -sf https://registry.npmjs.org/opencode-ai/latest | jq -r .version)
           HERDR_LATEST=$(curl -sf https://api.github.com/repos/herdrdev/herdr/releases/latest | jq -r .tag_name)
           HERDR_LATEST=${HERDR_LATEST#v}   # strip the leading 'v' from the tag
-          HERDR_STUDIO_LATEST=$(curl -sf https://api.github.com/repos/powerfooI/herdr-studio/releases/latest | jq -r .tag_name)
+          # herdr-studio was renamed to roamgate upstream (repo powerfooI/roamgate);
+          # -L follows GitHub's 301 so a future rename can't break this check.
+          HERDR_STUDIO_LATEST=$(curl -sfL https://api.github.com/repos/powerfooI/roamgate/releases/latest | jq -r .tag_name)
           HERDR_STUDIO_LATEST=${HERDR_STUDIO_LATEST#v}   # strip the leading 'v'
 
           for v in "claude:$CLAUDE_LATEST" "opencode:$OPENCODE_LATEST" "herdr:$HERDR_LATEST" "herdr-studio:$HERDR_STUDIO_LATEST"; do
@@ -118,7 +120,7 @@ jobs:
             codingenv/docker
 
       # Fail the publish on a fixable CRITICAL/HIGH CVE (OS packages + the
-      # bundled npm/python deps + the herdr + herdr-gui binaries). Lower
+      # bundled npm/python deps + the herdr + roamgate binaries). Lower
       # severities and CVEs with no available fix are
       # reported but don't block. To relax:
       # drop `--exit-code 1` (report-only) or narrow `--severity`.

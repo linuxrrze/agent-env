@@ -3,13 +3,14 @@ ARG NODE_VERSION=24.20.0
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 ARG HERDR_VERSION=0.9.0
-ARG HERDR_STUDIO_VERSION=0.5.3
+ARG HERDR_STUDIO_VERSION=0.7.9
 
 # UTF-8 without needing the `locales` package/locale-gen
 ENV LANG=C.UTF-8
-# herdr-gui ships an in-app self-updater; this image is version-pinned by CI,
-# so disable it to keep the baked-in release intact.
-ENV HERDR_GUI_DISABLE_UPDATE_CHECK=1
+# roamgate (formerly herdr-studio/herdr-gui) ships an in-app self-updater;
+# this image is version-pinned by CI, so disable it to keep the baked-in
+# release intact.
+ENV ROAMGATE_DISABLE_UPDATE_CHECK=1
 
 COPY files/entrypoint.sh /entrypoint.sh
 
@@ -52,15 +53,18 @@ npm install -g \
 curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
-# --- herdr-studio (web UI for herdr sessions), pinned release binary --------
-# A standalone binary (embeds its own runtime; no Node or other deps needed at
-# runtime). amd64: pull the pinned GitHub release tarball (contains herdr-gui
-# + a VERSION file) and install the binary, mirroring how the Node/herdr
-# archives are handled above for reproducibility.
-curl -fsSL "https://github.com/powerfooI/herdr-studio/releases/download/v${HERDR_STUDIO_VERSION}/herdr-gui-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/herdr-studio.tar.xz
-tar -xJf /tmp/herdr-studio.tar.xz -C /tmp herdr-gui-linux-x64/herdr-gui
-install -m 0755 /tmp/herdr-gui-linux-x64/herdr-gui /usr/local/bin/herdr-gui
-rm -rf /tmp/herdr-studio.tar.xz /tmp/herdr-gui-linux-x64
+# --- roamgate (web UI for herdr sessions), pinned release binary ------------
+# Upstream renamed herdr-studio/herdr-gui to roamgate at v0.7.0 (repo
+# powerfooI/roamgate). A standalone binary (embeds its own runtime; no Node or
+# other deps needed at runtime). amd64: pull the pinned GitHub release tarball
+# (contains roamgate + a VERSION file) and install the binary, mirroring how
+# the Node/herdr archives are handled above for reproducibility. The old
+# herdr-gui name is kept as a symlink for compatibility.
+curl -fsSL "https://github.com/powerfooI/roamgate/releases/download/v${HERDR_STUDIO_VERSION}/roamgate-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/roamgate.tar.xz
+tar -xJf /tmp/roamgate.tar.xz -C /tmp roamgate-linux-x64/roamgate
+install -m 0755 /tmp/roamgate-linux-x64/roamgate /usr/local/bin/roamgate
+ln -sf /usr/local/bin/roamgate /usr/local/bin/herdr-gui
+rm -rf /tmp/roamgate.tar.xz /tmp/roamgate-linux-x64
 
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
@@ -103,8 +107,8 @@ python3 --version
 command -v claude
 command -v opencode
 command -v herdr
-command -v herdr-gui
-herdr-gui --version
+command -v roamgate
+roamgate --version
 command -v tini
 
 rm -rf /var/lib/apt/lists/* /var/cache/apt/*
@@ -120,8 +124,9 @@ WORKDIR /home/sandbox
 
 # OpenSSH (see entrypoint; port configurable via SSH_PORT, default 2222)
 EXPOSE 2222
-# Herdr Studio web UI (herdr-gui), auto-started by the entrypoint
-# (HERDR_STUDIO_ENABLED, default yes; port via HERDR_STUDIO_PORT, default 8787)
+# roamgate web UI (formerly herdr-studio/herdr-gui), auto-started by the
+# entrypoint (HERDR_STUDIO_ENABLED, default yes; port via HERDR_STUDIO_PORT,
+# default 8787)
 EXPOSE 8787
 
 # tini as the PID-1 wrapper: reaps orphaned agent subprocesses (zombies) even
