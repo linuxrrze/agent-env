@@ -119,6 +119,15 @@ jobs:
             -t "$IMAGE:latest" \
             codingenv/docker
 
+      # Startup banner (image name + version, figlet style) as a thin layer
+      # on top of the built image, same tags -- see .gitea/scripts/add-banner.sh.
+      - name: Add startup banner
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        run: |
+          bash .gitea/scripts/add-banner.sh \
+            "$IMAGE:${{ steps.check.outputs.tag }}" \
+            "$IMAGE:latest"
+
       # Fail the publish on a fixable CRITICAL/HIGH CVE (OS packages + the
       # bundled npm/python deps + the herdr + roamgate binaries). Lower
       # severities and CVEs with no available fix are
