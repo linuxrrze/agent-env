@@ -1,6 +1,9 @@
 # Verifying the auto-update: .codingenv-version was manually decremented to
 # force a mismatch and confirm this workflow updates it back on its own.
 name: codingenv - check upstream versions & rebuild
+# Run title in the Actions list: scheduled/manual runs would otherwise show
+# whatever commit is latest on main. Empty (push) = Gitea's default subject.
+run-name: ${{ github.event_name == 'schedule' && 'Scheduled check' || github.event_name == 'workflow_dispatch' && 'Manual run' || '' }}
 
 on:
   schedule:
