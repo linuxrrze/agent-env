@@ -1,9 +1,4 @@
 FROM ubuntu:26.04
-ARG NODE_VERSION=24.20.0
-ARG CLAUDE_VERSION=latest
-ARG OPENCODE_VERSION=latest
-ARG HERDR_VERSION=0.9.0
-ARG HERDR_STUDIO_VERSION=0.7.9
 
 # UTF-8 without needing the `locales` package/locale-gen
 ENV LANG=C.UTF-8
@@ -12,8 +7,15 @@ ENV LANG=C.UTF-8
 # release intact.
 ENV ROAMGATE_DISABLE_UPDATE_CHECK=1
 
-COPY files/entrypoint.sh /entrypoint.sh
-
+# Layers ordered from least to most often changing, each ARG declared right
+# above the one RUN that uses it (a changed ARG value invalidates every RUN
+# after its declaration): a CLI bump -- the common case, near-daily -- only
+# rebuilds the npm layer and reuses the system/Node/herdr layers.
+#
+# System packages + users + SSH host keys. APT_REFRESH (CI passes the date)
+# re-runs this layer -- and its dist-upgrade -- at least once a day, so
+# Ubuntu security updates keep landing even while it is otherwise cached.
+ARG APT_REFRESH=
 RUN << EORUN
 set -euo pipefail
 
@@ -34,37 +36,6 @@ apt-get install -y --no-install-recommends \
   python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel \
   less vim tree jq unzip zip ripgrep fd-find screen \
   systemd-standalone-tmpfiles tini
-
-# --- Node.js + npm (official prebuilt binary; pinned & self-contained) -----
-# Extracted straight into /usr/local so `npm -g` installs land in
-# /usr/local/lib/node_modules with world-executable bins in /usr/local/bin.
-curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
-rm -f /tmp/node.tar.xz
-
-# --- The dev tools (claude + opencode), version-pinned by CI ---------------
-npm install -g \
-  "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
-  "opencode-ai@${OPENCODE_VERSION}"
-
-# --- herdr (the runtime your coding agents live on), pinned release binary --
-# amd64. Pull the pinned GitHub release binary straight down (no `curl | sh`),
-# mirroring how the Node tarball is handled above for reproducibility.
-curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
-chmod +x /usr/local/bin/herdr
-
-# --- roamgate (web UI for herdr sessions), pinned release binary ------------
-# Upstream renamed herdr-studio/herdr-gui to roamgate at v0.7.0 (repo
-# powerfooI/roamgate). A standalone binary (embeds its own runtime; no Node or
-# other deps needed at runtime). amd64: pull the pinned GitHub release tarball
-# (contains roamgate + a VERSION file) and install the binary, mirroring how
-# the Node/herdr archives are handled above for reproducibility. The old
-# herdr-gui name is kept as a symlink for compatibility.
-curl -fsSL "https://github.com/powerfooI/roamgate/releases/download/v${HERDR_STUDIO_VERSION}/roamgate-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/roamgate.tar.xz
-tar -xJf /tmp/roamgate.tar.xz -C /tmp roamgate-linux-x64/roamgate
-install -m 0755 /tmp/roamgate-linux-x64/roamgate /usr/local/bin/roamgate
-ln -sf /usr/local/bin/roamgate /usr/local/bin/herdr-gui
-rm -rf /tmp/roamgate.tar.xz /tmp/roamgate-linux-x64
 
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
@@ -100,6 +71,56 @@ ssh-keygen -t rsa -b 3072 -N '' -q -f /var/lib/ssh-keys/ssh_host_rsa_key
 ssh-keygen -t ecdsa -b 256 -N '' -q -f /var/lib/ssh-keys/ssh_host_ecdsa_key
 ssh-keygen -t ed25519 -N '' -q -f /var/lib/ssh-keys/ssh_host_ed25519_key
 
+rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+EORUN
+
+ARG NODE_VERSION=24.20.0
+RUN << EORUN
+set -euo pipefail
+
+# --- Node.js + npm (official prebuilt binary; pinned & self-contained) -----
+# Extracted straight into /usr/local so `npm -g` installs land in
+# /usr/local/lib/node_modules with world-executable bins in /usr/local/bin.
+curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+rm -f /tmp/node.tar.xz
+EORUN
+
+ARG HERDR_VERSION=0.9.3
+ARG HERDR_STUDIO_VERSION=0.7.13
+RUN << EORUN
+set -euo pipefail
+
+# --- herdr (the runtime your coding agents live on), pinned release binary --
+# amd64. Pull the pinned GitHub release binary straight down (no `curl | sh`),
+# mirroring how the Node tarball is handled above for reproducibility.
+curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
+chmod +x /usr/local/bin/herdr
+
+# --- roamgate (web UI for herdr sessions), pinned release binary ------------
+# Upstream renamed herdr-studio/herdr-gui to roamgate at v0.7.0 (repo
+# powerfooI/roamgate). A standalone binary (embeds its own runtime; no Node or
+# other deps needed at runtime). amd64: pull the pinned GitHub release tarball
+# (contains roamgate + a VERSION file) and install the binary, mirroring how
+# the Node/herdr archives are handled above for reproducibility. The old
+# herdr-gui name is kept as a symlink for compatibility.
+curl -fsSL "https://github.com/powerfooI/roamgate/releases/download/v${HERDR_STUDIO_VERSION}/roamgate-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/roamgate.tar.xz
+tar -xJf /tmp/roamgate.tar.xz -C /tmp roamgate-linux-x64/roamgate
+install -m 0755 /tmp/roamgate-linux-x64/roamgate /usr/local/bin/roamgate
+ln -sf /usr/local/bin/roamgate /usr/local/bin/herdr-gui
+rm -rf /tmp/roamgate.tar.xz /tmp/roamgate-linux-x64
+EORUN
+
+ARG CLAUDE_VERSION=latest
+ARG OPENCODE_VERSION=latest
+RUN << EORUN
+set -euo pipefail
+
+# --- The dev tools (claude + opencode), version-pinned by CI ---------------
+npm install -g \
+  "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
+  "opencode-ai@${OPENCODE_VERSION}"
+
 # Sanity: everything we promised to install is actually present.
 node --version
 npm --version
@@ -110,14 +131,16 @@ command -v herdr
 command -v roamgate
 roamgate --version
 command -v tini
+command -v /usr/sbin/sshd
 
-rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 # npm keeps a cache of every downloaded tarball under /root/.npm during the
 # global installs above (hundreds of MB). Drop it -- it's regenerated on
 # first use, and the package docs in it trip trivy's secret scanner.
 rm -rf /root/.npm
-chmod +x /entrypoint.sh
 EORUN
+
+# The entrypoint last: editing it rebuilds nothing above.
+COPY --chmod=755 files/entrypoint.sh /entrypoint.sh
 
 ENV HOME=/home/sandbox
 WORKDIR /home/sandbox
