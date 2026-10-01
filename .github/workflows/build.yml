@@ -14,9 +14,11 @@ on:
   push:
     branches: [main]
     paths:
+      # Only what goes into (or gates) the image -- not the README,
+      # .env.sample or the version file (CI's own bump commit would
+      # otherwise trigger a second, identical rebuild).
       - codingenv/docker/**
-      # .codingenv-version / .env.sample are intentionally excluded -- otherwise CI's
-      # own version-bump commit would re-trigger this workflow.
+      - codingenv/.trivyignore
       - .gitea/workflows/codingenv-rebuild.yml
 
 env:
@@ -112,7 +114,7 @@ jobs:
       - name: Build image
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
         run: |
-          docker build \
+          docker build --pull \
             --build-arg NODE_VERSION="${{ steps.check.outputs.node }}" \
             --build-arg CLAUDE_VERSION="${{ steps.check.outputs.claude }}" \
             --build-arg OPENCODE_VERSION="${{ steps.check.outputs.opencode }}" \
@@ -173,10 +175,19 @@ jobs:
 
       - name: Push image
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: |
-          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "$REGISTRY" \
-            -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+          printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
+            -u "$REGISTRY_USER" --password-stdin
           docker push "$IMAGE:${{ steps.check.outputs.tag }}"
+          # Dated tag next to the moving version tag: a rebuild (push, base
+          # update) re-publishes the same version tag, this keeps the
+          # previous build pullable for a rollback.
+          DATED="$IMAGE:${{ steps.check.outputs.tag }}-$(date -u +%Y%m%d)"
+          docker tag "$IMAGE:${{ steps.check.outputs.tag }}" "$DATED"
+          docker push "$DATED"
           docker push "$IMAGE:latest"
 
       - name: Record built version
