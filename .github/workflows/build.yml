@@ -25,6 +25,8 @@ env:
   REGISTRY: git.linux-ng.de
   IMAGE: git.linux-ng.de/marcel/codingenv
   VERSION_FILE: codingenv/.codingenv-version
+  # Digest of the base image the last build used (see 'Check base image digest').
+  BASE_DIGEST_FILE: codingenv/.codingenv-base-digest
   ENV_FILE: codingenv/.env.sample
 
 jobs:
@@ -108,11 +110,28 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Also rebuild when the base image is re-published under the same tag
+      # (OS security updates in the base), not only when the tracked version
+      # moves -- otherwise the image only picks those up by chance.
+      - name: Check base image digest
+        id: base
+        run: |
+          set -euo pipefail
+          DIGEST=$(bash .gitea/scripts/base-digest.sh codingenv/docker/Dockerfile)
+          CURRENT=$(cat "$BASE_DIGEST_FILE" 2>/dev/null || echo none)
+          echo "base image: current=$CURRENT latest=$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          if [ "$DIGEST" != "$CURRENT" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Build on a version change, and also on push / manual dispatch (so
       # editing the Dockerfile/entrypoint always rebuilds) -- only the nightly
       # cron skips when nothing upstream changed.
       - name: Build image
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           docker build --pull \
             --build-arg APT_REFRESH="$(date -u +%Y%m%d)" \
@@ -128,7 +147,7 @@ jobs:
       # Startup banner (image name + version, figlet style) as a thin layer
       # on top of the built image, same tags -- see .gitea/scripts/add-banner.sh.
       - name: Add startup banner
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           bash .gitea/scripts/add-banner.sh \
             "$IMAGE:${{ steps.check.outputs.tag }}" \
@@ -156,7 +175,7 @@ jobs:
       #   bump NODE_VERSION in codingenv/.env.sample and drop the entries from
       #   codingenv/.trivyignore.
       - name: Security scan (Trivy)
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           set -euo pipefail
           bash .gitea/scripts/trivy-scan.sh "$IMAGE:latest" \
@@ -164,7 +183,7 @@ jobs:
             --ignorefile codingenv/.trivyignore
 
       - name: Push image
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         env:
           REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
@@ -181,7 +200,7 @@ jobs:
           docker push "$IMAGE:latest"
 
       - name: Record built version
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true'
+        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           {
             echo "claude=${{ steps.check.outputs.claude }}"
@@ -189,12 +208,13 @@ jobs:
             echo "herdr=${{ steps.check.outputs.herdr }}"
             echo "herdr-studio=${{ steps.check.outputs.herdr-studio }}"
           } > "$VERSION_FILE"
+          echo "${{ steps.base.outputs.digest }}" > "$BASE_DIGEST_FILE"
           # keep codingenv/.env.sample (template for the local .env) in sync
           sed -i "s/^CLAUDE_VERSION=.*/CLAUDE_VERSION=${{ steps.check.outputs.claude }}/" "$ENV_FILE"
           sed -i "s/^OPENCODE_VERSION=.*/OPENCODE_VERSION=${{ steps.check.outputs.opencode }}/" "$ENV_FILE"
           sed -i "s/^HERDR_VERSION=.*/HERDR_VERSION=${{ steps.check.outputs.herdr }}/" "$ENV_FILE"
           sed -i "s/^HERDR_STUDIO_VERSION=.*/HERDR_STUDIO_VERSION=${{ steps.check.outputs.herdr-studio }}/" "$ENV_FILE"
-          git add "$VERSION_FILE" "$ENV_FILE"
+          git add "$VERSION_FILE" "$BASE_DIGEST_FILE" "$ENV_FILE"
           # A push-triggered rebuild with no upstream change writes identical
           # content -- only commit/push when a version actually moved.
           if git diff --cached --quiet; then
@@ -219,6 +239,10 @@ jobs:
             echo "Rebuilt, Trivy-scanned (no fixable critical/high CVEs), and"
             echo "pushed $IMAGE:${{ steps.check.outputs.tag }} and $IMAGE:latest."
           } > "$MSG"
+          # No tool moved -- this rebuild was triggered by a new base image only.
+          if [ "${{ steps.check.outputs.changed }}" != true ]; then
+            echo "codingenv: rebuild on updated base image ${{ steps.base.outputs.digest }}" > "$MSG"
+          fi
           git commit -F "$MSG"
           rm -f "$MSG"
           # Other workflows in this repo can push their own version-bump
