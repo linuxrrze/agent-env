@@ -183,7 +183,11 @@ jobs:
       - name: Build image
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
-          docker build --pull \
+          # --no-cache: --pull only refreshes the base layer. With an
+          # unchanged base digest the cached apt layer (update/dist-upgrade/
+          # install) would be reused, so archive security fixes for packages
+          # not in the base would never land.
+          docker build --pull --no-cache \
             --build-arg APT_REFRESH="$(date -u +%Y%m%d)" \
             --build-arg NODE_VERSION="${{ steps.check.outputs.node }}" \
             --build-arg CLAUDE_VERSION="${{ steps.check.outputs.claude }}" \
