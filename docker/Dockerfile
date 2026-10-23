@@ -37,6 +37,19 @@ apt-get install -y --no-install-recommends \
   less vim tree jq unzip zip ripgrep fd-find screen \
   systemd-standalone-tmpfiles tini
 
+# --- GitHub CLI (gh), from GitHub's official apt repo -----------------------
+# Not version-pinned/tracked by CI: like the Ubuntu packages above it lands at
+# its latest release whenever this layer re-runs (APT_REFRESH: on the first
+# rebuild of each day), so its Go stdlib stays current for the Trivy gate.
+# Ubuntu's own `gh` package lags upstream by months.
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+chmod 644 /etc/apt/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+  > /etc/apt/sources.list.d/github-cli.list
+apt-get update
+apt-get install -y --no-install-recommends gh
+
 # ubuntu:26.04 ships /usr/bin/pebble (Canonical's container init) as a plain
 # unregistered binary built with Go 1.26.5, which carries unpatched HIGH CVEs
 # (e.g. CVE-2026-33818). This image never runs pebble -- tini (see
@@ -111,6 +124,33 @@ ln -sf /usr/local/bin/roamgate /usr/local/bin/herdr-gui
 rm -rf /tmp/roamgate.tar.xz /tmp/roamgate-linux-x64
 EORUN
 
+ARG GLAB_VERSION=1.124.0
+ARG TEA_VERSION=0.16.0
+RUN << EORUN
+set -euo pipefail
+
+# --- glab (GitLab CLI) + tea (Gitea CLI), pinned release binaries ----------
+# Version-pinned and tracked by CI (like herdr/roamgate above); both are
+# checksum-verified against the release's own published sha256 before
+# install. amd64 only.
+GLAB_TGZ="glab_${GLAB_VERSION}_linux_amd64.tar.gz"
+curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${GLAB_TGZ}" -o "/tmp/${GLAB_TGZ}"
+curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt" -o /tmp/glab-checksums.txt
+# awk drains the whole file (no early exit); an empty hash makes sha256sum fail.
+echo "$(awk -v f="$GLAB_TGZ" '$2==f{print $1}' /tmp/glab-checksums.txt)  /tmp/${GLAB_TGZ}" | sha256sum -c -
+tar -xzf "/tmp/${GLAB_TGZ}" -C /tmp bin/glab
+install -m 0755 /tmp/bin/glab /usr/local/bin/glab
+rm -rf "/tmp/${GLAB_TGZ}" /tmp/glab-checksums.txt /tmp/bin
+
+TEA_XZ="tea-${TEA_VERSION}-linux-amd64.xz"
+curl -fsSL "https://gitea.com/gitea/tea/releases/download/v${TEA_VERSION}/${TEA_XZ}" -o "/tmp/${TEA_XZ}"
+curl -fsSL "https://gitea.com/gitea/tea/releases/download/v${TEA_VERSION}/${TEA_XZ}.sha256" -o /tmp/tea.sha256
+echo "$(cut -d' ' -f1 /tmp/tea.sha256)  /tmp/${TEA_XZ}" | sha256sum -c -
+xz -dc "/tmp/${TEA_XZ}" > /usr/local/bin/tea
+chmod 0755 /usr/local/bin/tea
+rm -f "/tmp/${TEA_XZ}" /tmp/tea.sha256
+EORUN
+
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 RUN << EORUN
@@ -130,6 +170,9 @@ command -v opencode
 command -v herdr
 command -v roamgate
 roamgate --version
+gh --version
+glab --version
+tea --version
 command -v tini
 command -v /usr/sbin/sshd
 

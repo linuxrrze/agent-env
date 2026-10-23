@@ -5,7 +5,8 @@ A self-hosted **code-development sandbox**: an Ubuntu container with a basic
 (`claude`) and **opencode** CLIs plus **herdr** (the runtime your coding
 agents live on) and **roamgate** (a web UI for herdr sessions — the
 standalone `roamgate` binary, formerly `herdr-studio`/`herdr-gui`, pinned to
-a GitHub release) preinstalled, and **OpenSSH** on port 2222.
+a GitHub release) and the **GitHub / GitLab / Gitea CLIs** (`gh`, `glab`,
+`tea`) preinstalled, and **OpenSSH** on port 2222.
 Your home (or just the tools' state dirs) is bind-mounted in and the sandbox
 runs as **your host user id**, so anything it writes is owned by you on the
 host (no root-owned litter, no `sudo` needed afterwards).
@@ -159,14 +160,15 @@ survive `docker compose restart` (growing container size in
 
 ## Build & version tracking
 
-`CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`
-(and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
+`CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`,
+`GLAB_VERSION`, `TEA_VERSION` (and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 
-- checks nightly for new releases of all four tools --
+- checks nightly for new releases of all six tools --
   `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
-  release) and roamgate (`powerfooI/roamgate`, formerly `herdr-studio`) --
+  release), roamgate (`powerfooI/roamgate`, formerly `herdr-studio`), `glab`
+  (gitlab.com release) and `tea` (gitea.com release) --
   and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
   CVEs), pushes, and bumps the tracked versions in
@@ -174,8 +176,14 @@ to `.env` locally) and are passed to the build. The CI workflow
 - always rebuilds on a push to `codingenv/docker/` (even without a version
   change).
 
+`gh` (GitHub CLI) is not version-tracked: it comes from GitHub's official apt
+repo (cli.github.com) and is refreshed to the latest release together with
+the Ubuntu packages on every rebuild.
+
 The image targets **amd64** (the Node tarball and the `herdr` /
-`roamgate` binaries are pinned for x86_64).
+`roamgate` / `glab` / `tea` binaries are pinned for x86_64).
+`glab` and `tea` are not part of the image tag; a glab/tea-only bump
+re-publishes the same version tag (the dated tag keeps the previous build).
 
 To rebuild locally:
 
