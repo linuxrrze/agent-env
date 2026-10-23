@@ -7,3 +7,4 @@ tea=0.16.0
 hadolint=2.15.1
 yq=4.54.1
 uv=0.13.5
+playwright-mcp=0.0.82

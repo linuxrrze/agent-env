@@ -19,6 +19,15 @@ Besides the usual build basics (`build-essential`, `git`, `jq`, `ripgrep`,
 - **Python tooling without sudo:** `python` (→ `python3`), `uv`/`uvx` and
   `pipx`. Ubuntu's pip refuses a bare `pip install` (PEP 668) -- use a venv,
   `uv tool install` or `pipx install` instead.
+- **Headless browser:** Playwright with Chromium's headless shell (in
+  `/opt/ms-playwright`, see `PLAYWRIGHT_BROWSERS_PATH`) and the Playwright
+  MCP server (`playwright-mcp`). The `playwright` CLI is pinned to the exact
+  version `@playwright/mcp` depends on, so both use the one baked-in browser.
+  Use it headless with Chromium, e.g. an MCP entry running
+  `playwright-mcp --browser chromium --headless`. MCP's default browser
+  (Google Chrome) and headed Chromium are *not* installed. A project with
+  its own `@playwright/test` version can add its revision next to it with
+  `npx playwright install chromium-headless-shell` (the dir is writable).
 - **Network/process debugging:** `ip`, `ping`, `dig`, `nc`, `lsof`,
   `killall`/`pstree`, `strace` (needs `cap_add: [SYS_PTRACE]` to attach to
   processes).
@@ -173,16 +182,16 @@ survive `docker compose restart` (growing container size in
 ## Build & version tracking
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`,
-`GLAB_VERSION`, `TEA_VERSION`, `HADOLINT_VERSION`, `YQ_VERSION`, `UV_VERSION`
-(and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
+`GLAB_VERSION`, `TEA_VERSION`, `HADOLINT_VERSION`, `YQ_VERSION`, `UV_VERSION`,
+`PLAYWRIGHT_MCP_VERSION` (and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 
-- checks nightly for new releases of all nine tools --
+- checks nightly for new releases of all ten tools --
   `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
   release), roamgate (`powerfooI/roamgate`, formerly `herdr-studio`), `glab`
   (gitlab.com release), `tea` (gitea.com release), and `hadolint`, `yq`, `uv`
-  (GitHub releases) --
+  (GitHub releases) and `@playwright/mcp` (npm) --
   and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
   CVEs), pushes, and bumps the tracked versions in
@@ -199,6 +208,10 @@ The image targets **amd64** (the Node tarball and the `herdr` /
 x86_64). Only claude, opencode, herdr and roamgate make up the image tag; a
 bump of only the other tools re-publishes the same version tag (the dated tag
 keeps the previous build).
+
+Trivy scans the Playwright npm packages and Chromium's apt libraries, but it
+can't see vulnerabilities inside Playwright's downloaded Chromium: the browser
+is patched only by CI's `@playwright/mcp` bumps.
 
 `actionlint` is deliberately not included: its latest release (1.7.12) is
 built with Go 1.26.1 and carries ~24 fixable HIGH stdlib CVEs, which would

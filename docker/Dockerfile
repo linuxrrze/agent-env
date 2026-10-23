@@ -200,6 +200,46 @@ install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /tmp/uv-x86_64-unknown-linux
 rm -rf "/tmp/${UV_TGZ}" /tmp/uv.sha256 /tmp/uv-x86_64-unknown-linux-gnu
 EORUN
 
+# Shared, image-wide browser dir: Playwright's default (~/.cache/ms-playwright)
+# would be hidden by the bind-mounted home.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+ARG PLAYWRIGHT_MCP_VERSION=0.0.83
+RUN << EORUN
+set -euo pipefail
+
+# --- Headless browser: Playwright + Chromium headless shell + Playwright MCP -
+# @playwright/mcp is the tracked pin; the `playwright` CLI is installed at the
+# exact (often alpha) version that MCP release depends on, so both look for
+# the same Chromium revision and only one browser lives in the image (the
+# latest `playwright` release usually expects a different revision, and a
+# mismatch fails with "Executable doesn't exist").
+# Only chromium-headless-shell (~160 MB) -- what headless Chromium launches
+# use; headed Chromium, Chrome, Firefox and WebKit are not installed.
+# Ubuntu's own `chromium` package is a snap shim that can't work in a
+# container. NB: Trivy scans the apt libs below but cannot see CVEs inside
+# Playwright's downloaded Chromium -- keeping PLAYWRIGHT_MCP_VERSION current
+# (CI does) is what keeps the browser patched.
+PLAYWRIGHT_VERSION=$(npm view "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" dependencies.playwright)
+test -n "$PLAYWRIGHT_VERSION"
+npm install -g \
+  "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
+  "playwright@${PLAYWRIGHT_VERSION}"
+# --with-deps apt-installs the shared libs + fonts Chromium needs (Playwright
+# ships a per-distro list; ubuntu26.04 is supported).
+apt-get update
+playwright install --with-deps chromium-headless-shell
+rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+# The mapped runtime user (PUID) can add other revisions next to the baked-in
+# one, e.g. for a project pinning its own @playwright/test version.
+chmod 1777 "$PLAYWRIGHT_BROWSERS_PATH"
+[ ! -d "$PLAYWRIGHT_BROWSERS_PATH/.links" ] || chmod 1777 "$PLAYWRIGHT_BROWSERS_PATH/.links"
+
+# Smoke test: actually render a page (catches missing shared libs).
+playwright screenshot --browser=chromium 'data:text/html,<h1>ok</h1>' /tmp/pw-smoke.png
+test -s /tmp/pw-smoke.png
+rm -rf /tmp/pw-smoke.png /root/.npm
+EORUN
+
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 RUN << EORUN
@@ -225,6 +265,8 @@ tea --version
 hadolint --version
 yq --version
 uv --version
+playwright --version
+command -v playwright-mcp
 command -v fd python shellcheck yamllint pipx tmux rsync file
 command -v tini
 command -v /usr/sbin/sshd
