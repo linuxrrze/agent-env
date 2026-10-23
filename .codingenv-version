@@ -4,3 +4,6 @@ herdr=0.9.5
 herdr-studio=0.8.9
 glab=1.123.0
 tea=0.16.0
+hadolint=2.15.1
+yq=4.54.1
+uv=0.13.5

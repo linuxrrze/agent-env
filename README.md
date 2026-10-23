@@ -11,6 +11,18 @@ Your home (or just the tools' state dirs) is bind-mounted in and the sandbox
 runs as **your host user id**, so anything it writes is owned by you on the
 host (no root-owned litter, no `sudo` needed afterwards).
 
+Besides the usual build basics (`build-essential`, `git`, `jq`, `ripgrep`,
+`fd`, `tmux`/`screen`, `rsync`, `sqlite3`, ...) it ships:
+
+- **Linters for this kind of repo:** `shellcheck`, `yamllint`, `hadolint`
+  (Dockerfiles) and `yq` (mikefarah's, *not* Ubuntu's jq wrapper).
+- **Python tooling without sudo:** `python` (→ `python3`), `uv`/`uvx` and
+  `pipx`. Ubuntu's pip refuses a bare `pip install` (PEP 668) -- use a venv,
+  `uv tool install` or `pipx install` instead.
+- **Network/process debugging:** `ip`, `ping`, `dig`, `nc`, `lsof`,
+  `killall`/`pstree`, `strace` (needs `cap_add: [SYS_PTRACE]` to attach to
+  processes).
+
 ## Deploy
 
 ```sh
@@ -161,14 +173,16 @@ survive `docker compose restart` (growing container size in
 ## Build & version tracking
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`,
-`GLAB_VERSION`, `TEA_VERSION` (and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
+`GLAB_VERSION`, `TEA_VERSION`, `HADOLINT_VERSION`, `YQ_VERSION`, `UV_VERSION`
+(and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 
-- checks nightly for new releases of all six tools --
+- checks nightly for new releases of all nine tools --
   `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
   release), roamgate (`powerfooI/roamgate`, formerly `herdr-studio`), `glab`
-  (gitlab.com release) and `tea` (gitea.com release) --
+  (gitlab.com release), `tea` (gitea.com release), and `hadolint`, `yq`, `uv`
+  (GitHub releases) --
   and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
   CVEs), pushes, and bumps the tracked versions in
@@ -181,9 +195,14 @@ repo (cli.github.com) and is refreshed to the latest release together with
 the Ubuntu packages on every rebuild.
 
 The image targets **amd64** (the Node tarball and the `herdr` /
-`roamgate` / `glab` / `tea` binaries are pinned for x86_64).
-`glab` and `tea` are not part of the image tag; a glab/tea-only bump
-re-publishes the same version tag (the dated tag keeps the previous build).
+`roamgate` / `glab` / `tea` / `hadolint` / `yq` / `uv` binaries are pinned for
+x86_64). Only claude, opencode, herdr and roamgate make up the image tag; a
+bump of only the other tools re-publishes the same version tag (the dated tag
+keeps the previous build).
+
+`actionlint` is deliberately not included: its latest release (1.7.12) is
+built with Go 1.26.1 and carries ~24 fixable HIGH stdlib CVEs, which would
+fail the Trivy gate.
 
 To rebuild locally:
 

@@ -35,6 +35,9 @@ services:
         HERDR_STUDIO_VERSION: ${HERDR_STUDIO_VERSION:-0.7.9}
         GLAB_VERSION: ${GLAB_VERSION:-1.124.0}
         TEA_VERSION: ${TEA_VERSION:-0.16.0}
+        HADOLINT_VERSION: ${HADOLINT_VERSION:-2.15.1}
+        YQ_VERSION: ${YQ_VERSION:-4.54.1}
+        UV_VERSION: ${UV_VERSION:-0.13.5}
     volumes:
       # ================================================================
       # Option A (recommended): mount your whole host home.

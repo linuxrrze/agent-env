@@ -24,20 +24,26 @@ CVE-2026-102276
 CVE-2026-102278
 CVE-2026-19534
 
-# Added 2026-10-10 in the (since removed) claude-env/opencode-env images,
-# carried over on 2026-10-23 when gh/glab/tea landed here: gh (GitHub CLI,
-# from cli.github.com's apt repo) 2.102.0 is built with Go 1.27.1 +
-# golang.org/x/net 0.58.0, which carry three fixable
-# HIGH DoS CVEs: net/http Range-header handling (server-side; gh is a
-# client), crypto/tls ECH extension parsing, and HTTP/2 SETTINGS flooding
-# (CVE-2026-78669, in both stdlib and x/net). Fixed in Go 1.27.2 / 1.26.9 and
-# x/net 0.60.0, but no gh release is built with them yet. Remove once a
-# newer gh lands (the apt layer picks it up on the next rebuild).
-#
-# Same three ids, same state, also cover tea 0.16.0 (Gitea CLI; Go 1.26.6 +
-# x/net 0.57.0, no tea release with Go >= 1.26.9 yet). glab was clean when
-# this was added. Re-check gh and tea before removing any of these: only drop
-# an id once neither binary is reported for it.
+# Three Go DoS CVEs (Added 2026-10-10 in the since-removed claude-env /
+# opencode-env images, carried over 2026-10-23 when gh/glab/tea landed
+# here): net/http Range-header handling (server-side; these are clients),
+# crypto/tls ECH extension parsing, and HTTP/2 SETTINGS flooding
+# (CVE-2026-78669, in both stdlib and x/net). Fixed in Go 1.27.2 / 1.26.9
+# and x/net 0.60.0. Still reported (local scan, fresh DB, 2026-10-23) for:
+#   - tea 0.16.0 (Gitea CLI; Go 1.26.6 + x/net 0.57.0, no newer release)
+#   - yq 4.54.1 (x/net 0.59.0 -- only CVE-2026-78669)
+# gh is clean again since 2.103.0 (Go 1.27.3); glab 1.124.0 is clean for
+# these three. Only drop an id once no binary is reported for it.
 CVE-2026-78667
 CVE-2026-97031
 CVE-2026-78669
+
+# Added 2026-10-23: Go crypto/x509 denylist for distrusted intermediate
+# certificates (published 2026-10-21, fixed in Go 1.27.3 / 1.26.10). It
+# guards platforms whose trust store isn't updated; on Linux Go uses the
+# system roots, and this image's apt layer refreshes ca-certificates on every
+# daily rebuild, so the practical exposure is low. Reported for glab 1.124.0
+# (Go 1.27.2), tea 0.16.0 (Go 1.26.6) and yq 4.54.1 (Go 1.27.1); none has a
+# release built with a fixed Go yet. Remove once all three have one (CI
+# bumps glab/tea/yq on its own).
+CVE-2026-111943

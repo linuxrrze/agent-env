@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determine latest claude + opencode + herdr + herdr-studio + glab + tea versions
+      - name: Determine latest claude + opencode + herdr + herdr-studio + glab + tea + hadolint + yq + uv versions
         id: check
         run: |
           set -euo pipefail
@@ -62,8 +62,17 @@ jobs:
           # tea (Gitea CLI) releases on gitea.com (Gitea API, GitHub-compatible shape).
           TEA_LATEST=$(curl -sf https://gitea.com/api/v1/repos/gitea/tea/releases/latest | jq -r .tag_name)
           TEA_LATEST=${TEA_LATEST#v}
+          # hadolint, yq (mikefarah) and uv: GitHub releases (uv's tags carry
+          # no leading 'v'; the strip is a no-op there).
+          HADOLINT_LATEST=$(curl -sf https://api.github.com/repos/hadolint/hadolint/releases/latest | jq -r .tag_name)
+          HADOLINT_LATEST=${HADOLINT_LATEST#v}
+          YQ_LATEST=$(curl -sf https://api.github.com/repos/mikefarah/yq/releases/latest | jq -r .tag_name)
+          YQ_LATEST=${YQ_LATEST#v}
+          UV_LATEST=$(curl -sf https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r .tag_name)
+          UV_LATEST=${UV_LATEST#v}
 
-          for v in "claude:$CLAUDE_LATEST" "opencode:$OPENCODE_LATEST" "herdr:$HERDR_LATEST" "herdr-studio:$HERDR_STUDIO_LATEST" "glab:$GLAB_LATEST" "tea:$TEA_LATEST"; do
+          for v in "claude:$CLAUDE_LATEST" "opencode:$OPENCODE_LATEST" "herdr:$HERDR_LATEST" "herdr-studio:$HERDR_STUDIO_LATEST" "glab:$GLAB_LATEST" "tea:$TEA_LATEST" \
+            "hadolint:$HADOLINT_LATEST" "yq:$YQ_LATEST" "uv:$UV_LATEST"; do
             name="${v%%:*}"; ver="${v#*:}"
             if [ -z "$ver" ] || [ "$ver" = "null" ]; then
               echo "::error::could not determine latest $name version" >&2
@@ -80,6 +89,9 @@ jobs:
           HERDR_STUDIO_CURRENT=$(awk -F= '$1=="herdr-studio"{print $2}' "$VERSION_FILE" 2>/dev/null); HERDR_STUDIO_CURRENT=${HERDR_STUDIO_CURRENT:-none}
           GLAB_CURRENT=$(awk -F= '$1=="glab"{print $2}' "$VERSION_FILE" 2>/dev/null); GLAB_CURRENT=${GLAB_CURRENT:-none}
           TEA_CURRENT=$(awk -F= '$1=="tea"{print $2}' "$VERSION_FILE" 2>/dev/null); TEA_CURRENT=${TEA_CURRENT:-none}
+          HADOLINT_CURRENT=$(awk -F= '$1=="hadolint"{print $2}' "$VERSION_FILE" 2>/dev/null); HADOLINT_CURRENT=${HADOLINT_CURRENT:-none}
+          YQ_CURRENT=$(awk -F= '$1=="yq"{print $2}' "$VERSION_FILE" 2>/dev/null); YQ_CURRENT=${YQ_CURRENT:-none}
+          UV_CURRENT=$(awk -F= '$1=="uv"{print $2}' "$VERSION_FILE" 2>/dev/null); UV_CURRENT=${UV_CURRENT:-none}
 
           # --- docker tag: <claude>-<opencode>-<herdr>-<herdr-studio> ------
           # Docker tags can't contain ':' or '+' -- sanitize the semver parts
@@ -88,8 +100,9 @@ jobs:
           OPENCODE_TAG=$(echo "$OPENCODE_LATEST" | sed 's/^[0-9]\+://' | tr '+' '-')
           HERDR_TAG=$(echo "$HERDR_LATEST" | sed 's/^[0-9]\+://' | tr '+' '-')
           HERDR_STUDIO_TAG=$(echo "$HERDR_STUDIO_LATEST" | sed 's/^[0-9]\+://' | tr '+' '-')
-          # glab/tea are deliberately NOT part of the tag (it would grow to six
-          # versions); a glab/tea-only bump re-publishes the same tag, and the
+          # glab/tea/hadolint/yq/uv are deliberately NOT part of the tag (it
+          # would grow to nine versions); a bump of only those re-publishes the
+          # same tag, and the
           # dated tag from the push step keeps the previous build pullable.
           TAG="${CLAUDE_TAG}-${OPENCODE_TAG}-${HERDR_TAG}-${HERDR_STUDIO_TAG}"
 
@@ -104,6 +117,9 @@ jobs:
           echo "herdr-studio: current=$HERDR_STUDIO_CURRENT   latest=$HERDR_STUDIO_LATEST"
           echo "glab:        current=$GLAB_CURRENT   latest=$GLAB_LATEST"
           echo "tea:         current=$TEA_CURRENT   latest=$TEA_LATEST"
+          echo "hadolint:    current=$HADOLINT_CURRENT   latest=$HADOLINT_LATEST"
+          echo "yq:          current=$YQ_CURRENT   latest=$YQ_LATEST"
+          echo "uv:          current=$UV_CURRENT   latest=$UV_LATEST"
           echo "node:        $NODE_VERSION"
           echo "tag=$TAG"
 
@@ -113,6 +129,9 @@ jobs:
           echo "herdr-studio=$HERDR_STUDIO_LATEST" >> "$GITHUB_OUTPUT"
           echo "glab=$GLAB_LATEST" >> "$GITHUB_OUTPUT"
           echo "tea=$TEA_LATEST" >> "$GITHUB_OUTPUT"
+          echo "hadolint=$HADOLINT_LATEST" >> "$GITHUB_OUTPUT"
+          echo "yq=$YQ_LATEST" >> "$GITHUB_OUTPUT"
+          echo "uv=$UV_LATEST" >> "$GITHUB_OUTPUT"
           echo "node=$NODE_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           # previous versions, used to build a verbose commit message below
@@ -122,8 +141,12 @@ jobs:
           echo "herdr-studio_prev=$HERDR_STUDIO_CURRENT" >> "$GITHUB_OUTPUT"
           echo "glab_prev=$GLAB_CURRENT" >> "$GITHUB_OUTPUT"
           echo "tea_prev=$TEA_CURRENT" >> "$GITHUB_OUTPUT"
+          echo "hadolint_prev=$HADOLINT_CURRENT" >> "$GITHUB_OUTPUT"
+          echo "yq_prev=$YQ_CURRENT" >> "$GITHUB_OUTPUT"
+          echo "uv_prev=$UV_CURRENT" >> "$GITHUB_OUTPUT"
           if [ "$CLAUDE_LATEST" != "$CLAUDE_CURRENT" ] || [ "$OPENCODE_LATEST" != "$OPENCODE_CURRENT" ] || [ "$HERDR_LATEST" != "$HERDR_CURRENT" ] || [ "$HERDR_STUDIO_LATEST" != "$HERDR_STUDIO_CURRENT" ] \
-            || [ "$GLAB_LATEST" != "$GLAB_CURRENT" ] || [ "$TEA_LATEST" != "$TEA_CURRENT" ]; then
+            || [ "$GLAB_LATEST" != "$GLAB_CURRENT" ] || [ "$TEA_LATEST" != "$TEA_CURRENT" ] \
+            || [ "$HADOLINT_LATEST" != "$HADOLINT_CURRENT" ] || [ "$YQ_LATEST" != "$YQ_CURRENT" ] || [ "$UV_LATEST" != "$UV_CURRENT" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -161,6 +184,9 @@ jobs:
             --build-arg HERDR_STUDIO_VERSION="${{ steps.check.outputs.herdr-studio }}" \
             --build-arg GLAB_VERSION="${{ steps.check.outputs.glab }}" \
             --build-arg TEA_VERSION="${{ steps.check.outputs.tea }}" \
+            --build-arg HADOLINT_VERSION="${{ steps.check.outputs.hadolint }}" \
+            --build-arg YQ_VERSION="${{ steps.check.outputs.yq }}" \
+            --build-arg UV_VERSION="${{ steps.check.outputs.uv }}" \
             -t "$IMAGE:${{ steps.check.outputs.tag }}" \
             -t "$IMAGE:latest" \
             codingenv/docker
@@ -175,7 +201,7 @@ jobs:
             "$IMAGE:latest"
 
       # Fail the publish on a fixable CRITICAL/HIGH CVE (OS packages + the
-      # bundled npm/python deps + the herdr / roamgate / gh / glab / tea binaries). Lower
+      # bundled npm/python deps + the herdr / roamgate / gh / glab / tea / hadolint / yq / uv binaries). Lower
       # severities and CVEs with no available fix are
       # reported but don't block. To relax:
       # drop `--exit-code 1` (report-only) or narrow `--severity`.
@@ -230,6 +256,9 @@ jobs:
             echo "herdr-studio=${{ steps.check.outputs.herdr-studio }}"
             echo "glab=${{ steps.check.outputs.glab }}"
             echo "tea=${{ steps.check.outputs.tea }}"
+            echo "hadolint=${{ steps.check.outputs.hadolint }}"
+            echo "yq=${{ steps.check.outputs.yq }}"
+            echo "uv=${{ steps.check.outputs.uv }}"
           } > "$VERSION_FILE"
           echo "${{ steps.base.outputs.digest }}" > "$BASE_DIGEST_FILE"
           # keep codingenv/.env.sample (template for the local .env) in sync
@@ -239,6 +268,9 @@ jobs:
           sed -i "s/^HERDR_STUDIO_VERSION=.*/HERDR_STUDIO_VERSION=${{ steps.check.outputs.herdr-studio }}/" "$ENV_FILE"
           sed -i "s/^GLAB_VERSION=.*/GLAB_VERSION=${{ steps.check.outputs.glab }}/" "$ENV_FILE"
           sed -i "s/^TEA_VERSION=.*/TEA_VERSION=${{ steps.check.outputs.tea }}/" "$ENV_FILE"
+          sed -i "s/^HADOLINT_VERSION=.*/HADOLINT_VERSION=${{ steps.check.outputs.hadolint }}/" "$ENV_FILE"
+          sed -i "s/^YQ_VERSION=.*/YQ_VERSION=${{ steps.check.outputs.yq }}/" "$ENV_FILE"
+          sed -i "s/^UV_VERSION=.*/UV_VERSION=${{ steps.check.outputs.uv }}/" "$ENV_FILE"
           git add "$VERSION_FILE" "$BASE_DIGEST_FILE" "$ENV_FILE"
           # A push-triggered rebuild with no upstream change writes identical
           # content -- only commit/push when a version actually moved.
@@ -252,7 +284,7 @@ jobs:
           # per the repo convention (avoids -m quoting pitfalls).
           MSG="$(mktemp)"
           {
-            echo "codingenv: bump tracked tool versions to claude=${{ steps.check.outputs.claude }} opencode=${{ steps.check.outputs.opencode }} herdr=${{ steps.check.outputs.herdr }} herdr-studio=${{ steps.check.outputs.herdr-studio }} glab=${{ steps.check.outputs.glab }} tea=${{ steps.check.outputs.tea }}"
+            echo "codingenv: bump tracked tool versions to claude=${{ steps.check.outputs.claude }} opencode=${{ steps.check.outputs.opencode }} herdr=${{ steps.check.outputs.herdr }} herdr-studio=${{ steps.check.outputs.herdr-studio }} glab=${{ steps.check.outputs.glab }} tea=${{ steps.check.outputs.tea }} hadolint=${{ steps.check.outputs.hadolint }} yq=${{ steps.check.outputs.yq }} uv=${{ steps.check.outputs.uv }}"
             echo
             echo "CI detected new upstream releases of the preinstalled dev"
             echo "tools and rebuilt the image against them:"
@@ -262,6 +294,9 @@ jobs:
             echo "  - herdr-studio (GitHub release): ${{ steps.check.outputs.herdr-studio_prev }} -> ${{ steps.check.outputs.herdr-studio }}"
             echo "  - glab (GitLab release):     ${{ steps.check.outputs.glab_prev }} -> ${{ steps.check.outputs.glab }}"
             echo "  - tea (Gitea release):       ${{ steps.check.outputs.tea_prev }} -> ${{ steps.check.outputs.tea }}"
+            echo "  - hadolint (GitHub release): ${{ steps.check.outputs.hadolint_prev }} -> ${{ steps.check.outputs.hadolint }}"
+            echo "  - yq (GitHub release):       ${{ steps.check.outputs.yq_prev }} -> ${{ steps.check.outputs.yq }}"
+            echo "  - uv (GitHub release):       ${{ steps.check.outputs.uv_prev }} -> ${{ steps.check.outputs.uv }}"
             echo
             echo "Rebuilt, Trivy-scanned (no fixable critical/high CVEs), and"
             echo "pushed $IMAGE:${{ steps.check.outputs.tag }} and $IMAGE:latest."

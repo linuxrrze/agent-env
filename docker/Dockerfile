@@ -35,7 +35,15 @@ apt-get install -y --no-install-recommends \
   git openssh-client openssh-server \
   python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel \
   less vim tree jq unzip zip ripgrep fd-find screen \
-  systemd-standalone-tmpfiles tini
+  systemd-standalone-tmpfiles tini \
+  python-is-python3 file rsync tmux sqlite3 zstd \
+  iproute2 iputils-ping bind9-dnsutils netcat-openbsd \
+  psmisc lsof strace \
+  shellcheck yamllint pipx
+
+# Debian/Ubuntu ship fd as `fdfind` (name clash with an older package);
+# agents and docs call it `fd`.
+ln -s /usr/bin/fdfind /usr/local/bin/fd
 
 # --- GitHub CLI (gh), from GitHub's official apt repo -----------------------
 # Not version-pinned/tracked by CI: like the Ubuntu packages above it lands at
@@ -151,6 +159,47 @@ chmod 0755 /usr/local/bin/tea
 rm -f "/tmp/${TEA_XZ}" /tmp/tea.sha256
 EORUN
 
+ARG HADOLINT_VERSION=2.15.1
+ARG YQ_VERSION=4.54.1
+ARG UV_VERSION=0.13.5
+RUN << EORUN
+set -euo pipefail
+
+# --- hadolint, yq (mikefarah), uv: pinned release binaries ----------------
+# Version-pinned and tracked by CI (like glab/tea above), each verified
+# against the release's own published sha256 before install. amd64 only.
+# From upstream, not Ubuntu: yq is a Go binary (Ubuntu's rebuilds lag Go
+# security fixes -- the Trivy gate), Ubuntu's `yq` package is an unrelated
+# jq wrapper with different syntax, and hadolint is not packaged at all.
+# (actionlint was left out on purpose: its latest release, 1.7.12, is built
+# with Go 1.26.1 and carries ~24 fixable HIGH stdlib CVEs.) uv lets the
+# non-root user install Python tools (pip is PEP 668 externally-managed
+# here, so a bare `pip install` fails).
+# Every awk below drains its whole file (no early exit); an empty hash makes
+# sha256sum fail.
+GH=https://github.com
+curl -fsSL "${GH}/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64" -o /tmp/hadolint
+curl -fsSL "${GH}/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/checksums.sha256" -o /tmp/hadolint.sums
+echo "$(awk '$2=="*hadolint-linux-x86_64" || $2=="hadolint-linux-x86_64"{print $1}' /tmp/hadolint.sums)  /tmp/hadolint" | sha256sum -c -
+install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
+rm -f /tmp/hadolint /tmp/hadolint.sums
+
+curl -fsSL "${GH}/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o /tmp/yq
+# checksums-bsd lines: `SHA256 (yq_linux_amd64) = <hash>`
+curl -fsSL "${GH}/mikefarah/yq/releases/download/v${YQ_VERSION}/checksums-bsd" -o /tmp/yq.sums
+echo "$(awk '$1=="SHA256" && $2=="(yq_linux_amd64)"{print $4}' /tmp/yq.sums)  /tmp/yq" | sha256sum -c -
+install -m 0755 /tmp/yq /usr/local/bin/yq
+rm -f /tmp/yq /tmp/yq.sums
+
+UV_TGZ=uv-x86_64-unknown-linux-gnu.tar.gz
+curl -fsSL "${GH}/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TGZ}" -o "/tmp/${UV_TGZ}"
+curl -fsSL "${GH}/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TGZ}.sha256" -o /tmp/uv.sha256
+echo "$(cut -d' ' -f1 /tmp/uv.sha256)  /tmp/${UV_TGZ}" | sha256sum -c -
+tar -xzf "/tmp/${UV_TGZ}" -C /tmp
+install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/
+rm -rf "/tmp/${UV_TGZ}" /tmp/uv.sha256 /tmp/uv-x86_64-unknown-linux-gnu
+EORUN
+
 ARG CLAUDE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 RUN << EORUN
@@ -173,6 +222,10 @@ roamgate --version
 gh --version
 glab --version
 tea --version
+hadolint --version
+yq --version
+uv --version
+command -v fd python shellcheck yamllint pipx tmux rsync file
 command -v tini
 command -v /usr/sbin/sshd
 
