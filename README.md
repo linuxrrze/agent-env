@@ -179,6 +179,15 @@ survive `docker compose restart` (growing container size in
   when `/tmp` is not a separate mountpoint, so a bind mount you manage is
   never touched.
 
+## Craft MCP servers (storytold-mcp / solidcraft-mcp)
+
+The MCP servers of the ArtCraft apps and SolidCraft run in their own
+containers next to this one, joined to its compose network, and are
+reachable from here over HTTP, e.g.
+`http://storytold-mcp:8080/servers/pdfcraft/mcp`. They share
+`/home/sandbox/work` with this container. Setup and client config:
+[`storytold-mcp/README.md`](../storytold-mcp/README.md).
+
 ## Build & version tracking
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`,
