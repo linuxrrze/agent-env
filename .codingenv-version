@@ -1,10 +1,10 @@
-claude=2.1.309
-opencode=1.19.4
+claude=2.1.318
+opencode=1.19.5
 herdr=0.9.5
-herdr-studio=0.8.9
-glab=1.124.0
+herdr-studio=0.8.15
+glab=1.128.0
 tea=0.16.0
 hadolint=2.15.1
 yq=4.54.1
-uv=0.13.5
-playwright-mcp=0.0.83
+uv=0.13.7
+playwright-mcp=0.0.84
