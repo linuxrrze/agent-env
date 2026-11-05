@@ -192,7 +192,7 @@ reachable from here over HTTP, e.g.
 
 `CLAUDE_VERSION`, `OPENCODE_VERSION`, `HERDR_VERSION`, `HERDR_STUDIO_VERSION`,
 `GLAB_VERSION`, `TEA_VERSION`, `HADOLINT_VERSION`, `YQ_VERSION`, `UV_VERSION`,
-`PLAYWRIGHT_MCP_VERSION` (and `NODE_VERSION`) live in `.env.sample` (the committed template, copied
+`PLAYWRIGHT_MCP_VERSION` (and the manual `NODE_VERSION` / `NPM_VERSION` pins) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
 [`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
 

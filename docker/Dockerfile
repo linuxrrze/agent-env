@@ -96,6 +96,7 @@ rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 EORUN
 
 ARG NODE_VERSION=24.20.0
+ARG NPM_VERSION=11.21.2
 RUN << EORUN
 set -euo pipefail
 
@@ -105,6 +106,13 @@ set -euo pipefail
 curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
 tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
 rm -f /tmp/node.tar.xz
+
+# Node's bundled npm lags behind on its own bundled deps (undici, tar,
+# brace-expansion, ...) and Trivy flags those -- replace it in place with the
+# pinned npm (NPM_VERSION, see .env.sample).
+npm install -g "npm@${NPM_VERSION}"
+test "$(npm --version)" = "$NPM_VERSION"
+rm -rf /root/.npm
 EORUN
 
 ARG HERDR_VERSION=0.9.3

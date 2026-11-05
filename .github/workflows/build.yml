@@ -110,10 +110,11 @@ jobs:
           # dated tag from the push step keeps the previous build pullable.
           TAG="${CLAUDE_TAG}-${OPENCODE_TAG}-${HERDR_TAG}-${HERDR_STUDIO_TAG}"
 
-          # NODE_VERSION is a manual pin in .env.sample (not CI-tracked) -- honor it
-          # so a local Node bump isn't silently ignored when a tool update
-          # triggers this build.
+          # NODE_VERSION / NPM_VERSION are manual pins in .env.sample (not
+          # CI-tracked) -- honor them so a local Node/npm bump isn't silently
+          # ignored when a tool update triggers this build.
           NODE_VERSION=$(awk -F= '$1=="NODE_VERSION"{print $2}' "$ENV_FILE" 2>/dev/null); NODE_VERSION=${NODE_VERSION:-24.20.0}
+          NPM_VERSION=$(awk -F= '$1=="NPM_VERSION"{print $2}' "$ENV_FILE" 2>/dev/null); NPM_VERSION=${NPM_VERSION:-11.21.2}
 
           echo "claude:      current=$CLAUDE_CURRENT   latest=$CLAUDE_LATEST"
           echo "opencode:    current=$OPENCODE_CURRENT latest=$OPENCODE_LATEST"
@@ -126,6 +127,7 @@ jobs:
           echo "uv:          current=$UV_CURRENT   latest=$UV_LATEST"
           echo "playwright-mcp: current=$PLAYWRIGHT_MCP_CURRENT   latest=$PLAYWRIGHT_MCP_LATEST"
           echo "node:        $NODE_VERSION"
+          echo "npm:         $NPM_VERSION"
           echo "tag=$TAG"
 
           echo "claude=$CLAUDE_LATEST" >> "$GITHUB_OUTPUT"
@@ -139,6 +141,7 @@ jobs:
           echo "uv=$UV_LATEST" >> "$GITHUB_OUTPUT"
           echo "playwright-mcp=$PLAYWRIGHT_MCP_LATEST" >> "$GITHUB_OUTPUT"
           echo "node=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           # previous versions, used to build a verbose commit message below
           echo "claude_prev=$CLAUDE_CURRENT" >> "$GITHUB_OUTPUT"
@@ -190,6 +193,7 @@ jobs:
           docker build --pull --no-cache \
             --build-arg APT_REFRESH="$(date -u +%Y%m%d)" \
             --build-arg NODE_VERSION="${{ steps.check.outputs.node }}" \
+            --build-arg NPM_VERSION="${{ steps.check.outputs.npm }}" \
             --build-arg CLAUDE_VERSION="${{ steps.check.outputs.claude }}" \
             --build-arg OPENCODE_VERSION="${{ steps.check.outputs.opencode }}" \
             --build-arg HERDR_VERSION="${{ steps.check.outputs.herdr }}" \
@@ -228,14 +232,9 @@ jobs:
       #   not bind-mounted; see Dockerfile + docker-compose.yml.sample) -- the
       #   private host keys are the expected content of an SSH-server image,
       #   not a leak. The '**/ssh_host_*_key' glob matches them at the new path.
-      # - The 4 npm CVEs below: the npm bundled with node 24.20.0 pins
-      #   transitive deps (brace-expansion, ip-address, tar) whose fixes are
-      #   published (>=5.0.9 / >=10.3.1 / >=7.5.22), but fresh npm installs
-      #   are currently broken (@npmcli/docs was unpublished from the
-      #   registry) and in-place `npm install -g npm@...` keeps the old
-      #   pinned versions. Re-check when a Node release bundles a newer npm;
-      #   bump NODE_VERSION in codingenv/.env.sample and drop the entries from
-      #   codingenv/.trivyignore.
+      # - npm's bundled deps (undici, tar, brace-expansion, ...) are not
+      #   ignored: the image replaces Node's npm with the NPM_VERSION pin
+      #   (codingenv/.env.sample) -- bump that when the scan flags them.
       - name: Security scan (Trivy)
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |

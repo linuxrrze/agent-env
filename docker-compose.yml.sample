@@ -29,6 +29,7 @@ services:
       context: ./docker
       args:
         NODE_VERSION: ${NODE_VERSION:-24.20.0}
+        NPM_VERSION: ${NPM_VERSION:-11.21.2}
         CLAUDE_VERSION: ${CLAUDE_VERSION:-latest}
         OPENCODE_VERSION: ${OPENCODE_VERSION:-latest}
         HERDR_VERSION: ${HERDR_VERSION:-0.9.0}

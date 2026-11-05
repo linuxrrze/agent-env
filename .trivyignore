@@ -1,29 +1,6 @@
 # Trivy vulnerability-ignore list for the codingenv image
 # (used via --ignorefile in .gitea/workflows/codingenv-rebuild.yml).
 #
-# npm bundled with node 24.20.0 pins transitive deps whose fixes are
-# published upstream (brace-expansion >= 5.0.9, ip-address >= 10.3.1,
-# tar >= 7.5.22), but they are unreachable right now: fresh npm installs
-# are broken (@npmcli/docs was unpublished from the npm registry) and an
-# in-place `npm install -g npm@...` keeps the old pinned versions.
-#
-# Re-check after every NODE_VERSION bump (codingenv/.env.sample): once a Node
-# release bundles an npm with the fixed pins, remove the entries below.
-
-CVE-2026-14257
-CVE-2026-69152
-CVE-2026-69192
-CVE-2026-73566
-
-# Added 2026-09-30, same situation: npm's bundled brace-expansion 5.0.7
-# (fixed >= 5.0.10 / 5.0.11) and undici 6.27.0 (fixed >= 6.28.1). No npm
-# release bundles the fixed versions yet -- not even npm 12.1.0 (latest,
-# brace-expansion 5.0.9 / undici 6.28.0), nor the npm in Node 24.21.0 LTS /
-# 26.10.0 (npm 11.19.x). Remove once a Node/npm release ships them.
-CVE-2026-102276
-CVE-2026-102278
-CVE-2026-19534
-
 # Three Go DoS CVEs (Added 2026-10-10 in the since-removed claude-env /
 # opencode-env images, carried over 2026-10-23 when gh/glab/tea landed
 # here): net/http Range-header handling (server-side; these are clients),
