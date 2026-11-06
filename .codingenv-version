@@ -5,6 +5,6 @@ herdr-studio=0.8.15
 glab=1.128.0
 tea=0.16.0
 hadolint=2.15.1
-yq=4.54.1
+yq=4.54.2
 uv=0.13.7
 playwright-mcp=0.0.84
