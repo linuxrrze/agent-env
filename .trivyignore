@@ -24,3 +24,11 @@ CVE-2026-78669
 # release built with a fixed Go yet. Remove once all three have one (CI
 # bumps glab/tea/yq on its own).
 CVE-2026-111943
+
+# Added 2026-11-07: golang.org/x/net/html DoS via crafted HTML input (fixed
+# in x/net 0.62.0). Reported for gh 2.103.3 (x/net 0.60.0; trunk is only at
+# 0.61.0) and tea 0.16.0 (x/net 0.57.0); neither has a release with the fix.
+# Both are interactive CLI clients talking to the user's own forges, not
+# services parsing untrusted HTML, and a hit means a crashed CLI process at
+# worst. Remove once CI bumps gh (apt, daily) and tea past x/net 0.62.0.
+CVE-2026-78661
