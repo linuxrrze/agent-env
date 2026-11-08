@@ -98,6 +98,9 @@ if [ "$current_uid" -eq 0 ]; then
     echo "UsePAM no"
     echo "X11Forwarding no"
     echo "AcceptEnv LANG LC_*"
+    # No lastlog: the file doesn't exist in the container, and sshd would log
+    # "lastlog_openseek: Couldn't stat /var/log/lastlog" on every login.
+    echo "PrintLastLog no"
     for t in rsa ecdsa ed25519; do
       if [ -f "${SSH_KEYS_DIR}/ssh_host_${t}_key" ]; then
         echo "HostKey ${SSH_KEYS_DIR}/ssh_host_${t}_key"
@@ -106,7 +109,10 @@ if [ "$current_uid" -eq 0 ]; then
   } > /etc/ssh/sshd_config.d/60-codingenv.conf
   # -e sends sshd's logs to stderr (not syslog) so they show up in
   # `docker logs` / compose logs; the container's stderr is the log sink.
-  /usr/sbin/sshd -D -e 2>&1 &
+  # With -e sshd prints bare messages (no program name), so prefix each line
+  # with "sshd: " to tell them apart from the rest of the container's output.
+  # sed -u: unbuffered, so lines show up right away.
+  /usr/sbin/sshd -D -e 2>&1 | sed -u 's/^/sshd: /' >&2 &
   echo "codingenv: sshd listening on port ${SSH_PORT} (user: ${SBOX_USER}, pubkey auth)" >&2
 else
   echo "::warning:: not running as root; cannot remap user id or start sshd. Set the container to run as root (no 'user:' in compose)." >&2

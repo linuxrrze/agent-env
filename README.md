@@ -124,6 +124,8 @@ ssh -p 2222 sandbox@<host-ip>
   **once** (the old keys lived in `/etc/ssh` inside the image and are not
   carried into `./fs/ssh-keys/`): run `ssh-keygen -R <host>` on the client
   (or clean the known_hosts entry), after which the fingerprint is stable.
+- sshd logs to the container log (`docker compose logs`), each line
+  prefixed with `sshd: `.
 - `~/.ssh` must be `700` and `authorized_keys` `600` (ssh `StrictModes`); a
   normal user home already satisfies this.
 - To (not recommended) allow password logins, set `SSH_PASSWORD_AUTH=yes` in
