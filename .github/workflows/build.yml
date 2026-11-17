@@ -1,8 +1,6 @@
-# Verifying the auto-update: .codingenv-version was manually decremented to
-# force a mismatch and confirm this workflow updates it back on its own.
-name: codingenv - check upstream versions & rebuild
+name: agent-env - check upstream versions & rebuild
 # Run title in the Actions list: scheduled/manual runs would otherwise show
-# whatever commit is latest on main. Empty (push) = Gitea's default subject.
+# whatever commit is latest on main. Empty (push) = GitHub's default (the commit subject).
 run-name: ${{ github.event_name == 'schedule' && 'Scheduled check' || github.event_name == 'workflow_dispatch' && 'Manual run' || '' }}
 
 on:
@@ -17,17 +15,21 @@ on:
       # Only what goes into (or gates) the image -- not the README,
       # .env.sample or the version file (CI's own bump commit would
       # otherwise trigger a second, identical rebuild).
-      - codingenv/docker/**
-      - codingenv/.trivyignore
-      - .gitea/workflows/codingenv-rebuild.yml
+      - docker/**
+      - .trivyignore
+      - .github/workflows/build.yml
 
 env:
-  REGISTRY: git.linux-ng.de
-  IMAGE: git.linux-ng.de/marcel/codingenv
-  VERSION_FILE: codingenv/.codingenv-version
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/linuxrrze/agent-env
+  VERSION_FILE: .agent-env-version
   # Digest of the base image the last build used (see 'Check base image digest').
-  BASE_DIGEST_FILE: codingenv/.codingenv-base-digest
-  ENV_FILE: codingenv/.env.sample
+  BASE_DIGEST_FILE: .agent-env-base-digest
+  ENV_FILE: .env.sample
+
+permissions:
+  contents: write   # "Record built version" pushes the version/digest bump
+  packages: write   # push to ghcr.io
 
 jobs:
   check-and-build:
@@ -37,8 +39,13 @@ jobs:
 
       - name: Determine latest claude + opencode + herdr + herdr-studio + glab + tea + hadolint + yq + uv + playwright-mcp versions
         id: check
+        env:
+          # api.github.com: authenticated calls get 1000/h per repo instead of
+          # the 60/h anonymous limit shared by every job on the runner's IP.
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          gh_api() { curl -sfL -H "Authorization: Bearer $GH_API_TOKEN" "https://api.github.com/$1"; }
           command -v jq >/dev/null || (apt-get update -qq && apt-get install -y -qq jq)
 
           # --- fetch latest upstream versions ------------------------------
@@ -49,11 +56,11 @@ jobs:
           # `pipefail`.
           CLAUDE_LATEST=$(curl -sf https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r .version)
           OPENCODE_LATEST=$(curl -sf https://registry.npmjs.org/opencode-ai/latest | jq -r .version)
-          HERDR_LATEST=$(curl -sf https://api.github.com/repos/herdrdev/herdr/releases/latest | jq -r .tag_name)
+          HERDR_LATEST=$(gh_api repos/herdrdev/herdr/releases/latest | jq -r .tag_name)
           HERDR_LATEST=${HERDR_LATEST#v}   # strip the leading 'v' from the tag
           # herdr-studio was renamed to roamgate upstream (repo powerfooI/roamgate);
           # -L follows GitHub's 301 so a future rename can't break this check.
-          HERDR_STUDIO_LATEST=$(curl -sfL https://api.github.com/repos/powerfooI/roamgate/releases/latest | jq -r .tag_name)
+          HERDR_STUDIO_LATEST=$(gh_api repos/powerfooI/roamgate/releases/latest | jq -r .tag_name)
           HERDR_STUDIO_LATEST=${HERDR_STUDIO_LATEST#v}   # strip the leading 'v'
           # glab (GitLab CLI) releases on gitlab.com: permalink/latest answers
           # with a redirect to the newest release, hence -L.
@@ -64,11 +71,11 @@ jobs:
           TEA_LATEST=${TEA_LATEST#v}
           # hadolint, yq (mikefarah) and uv: GitHub releases (uv's tags carry
           # no leading 'v'; the strip is a no-op there).
-          HADOLINT_LATEST=$(curl -sf https://api.github.com/repos/hadolint/hadolint/releases/latest | jq -r .tag_name)
+          HADOLINT_LATEST=$(gh_api repos/hadolint/hadolint/releases/latest | jq -r .tag_name)
           HADOLINT_LATEST=${HADOLINT_LATEST#v}
-          YQ_LATEST=$(curl -sf https://api.github.com/repos/mikefarah/yq/releases/latest | jq -r .tag_name)
+          YQ_LATEST=$(gh_api repos/mikefarah/yq/releases/latest | jq -r .tag_name)
           YQ_LATEST=${YQ_LATEST#v}
-          UV_LATEST=$(curl -sf https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r .tag_name)
+          UV_LATEST=$(gh_api repos/astral-sh/uv/releases/latest | jq -r .tag_name)
           UV_LATEST=${UV_LATEST#v}
           # @playwright/mcp on npm; the Dockerfile derives the matching
           # `playwright` version from it, so this one pin covers both.
@@ -170,7 +177,7 @@ jobs:
         id: base
         run: |
           set -euo pipefail
-          DIGEST=$(bash .gitea/scripts/base-digest.sh codingenv/docker/Dockerfile)
+          DIGEST=$(bash .github/scripts/base-digest.sh docker/Dockerfile)
           CURRENT=$(cat "$BASE_DIGEST_FILE" 2>/dev/null || echo none)
           echo "base image: current=$CURRENT latest=$DIGEST"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
@@ -206,14 +213,15 @@ jobs:
             --build-arg PLAYWRIGHT_MCP_VERSION="${{ steps.check.outputs.playwright-mcp }}" \
             -t "$IMAGE:${{ steps.check.outputs.tag }}" \
             -t "$IMAGE:latest" \
-            codingenv/docker
+            --label org.opencontainers.image.source=https://github.com/linuxrrze/agent-env \
+            docker
 
       # Startup banner (image name + version, figlet style) as a thin layer
-      # on top of the built image, same tags -- see .gitea/scripts/add-banner.sh.
+      # on top of the built image, same tags -- see .github/scripts/add-banner.sh.
       - name: Add startup banner
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
-          bash .gitea/scripts/add-banner.sh \
+          bash .github/scripts/add-banner.sh \
             "$IMAGE:${{ steps.check.outputs.tag }}" \
             "$IMAGE:latest"
 
@@ -234,20 +242,20 @@ jobs:
       #   not a leak. The '**/ssh_host_*_key' glob matches them at the new path.
       # - npm's bundled deps (undici, tar, brace-expansion, ...) are not
       #   ignored: the image replaces Node's npm with the NPM_VERSION pin
-      #   (codingenv/.env.sample) -- bump that when the scan flags them.
+      #   (.env.sample) -- bump that when the scan flags them.
       - name: Security scan (Trivy)
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           set -euo pipefail
-          bash .gitea/scripts/trivy-scan.sh "$IMAGE:latest" \
+          bash .github/scripts/trivy-scan.sh "$IMAGE:latest" \
             --skip-files '**/ssh_host_*_key' \
-            --ignorefile codingenv/.trivyignore
+            --ignorefile .trivyignore
 
       - name: Push image
         if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         env:
-          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
             -u "$REGISTRY_USER" --password-stdin
@@ -276,7 +284,7 @@ jobs:
             echo "playwright-mcp=${{ steps.check.outputs.playwright-mcp }}"
           } > "$VERSION_FILE"
           echo "${{ steps.base.outputs.digest }}" > "$BASE_DIGEST_FILE"
-          # keep codingenv/.env.sample (template for the local .env) in sync
+          # keep .env.sample (template for the local .env) in sync
           sed -i "s/^CLAUDE_VERSION=.*/CLAUDE_VERSION=${{ steps.check.outputs.claude }}/" "$ENV_FILE"
           sed -i "s/^OPENCODE_VERSION=.*/OPENCODE_VERSION=${{ steps.check.outputs.opencode }}/" "$ENV_FILE"
           sed -i "s/^HERDR_VERSION=.*/HERDR_VERSION=${{ steps.check.outputs.herdr }}/" "$ENV_FILE"
@@ -294,13 +302,13 @@ jobs:
             echo "no version change to record"
             exit 0
           fi
-          git config user.email "gitea-actions@linux-ng.de"
-          git config user.name "gitea-actions"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
           # Multi-line message with embedded values -> temp file + `commit -F`,
           # per the repo convention (avoids -m quoting pitfalls).
           MSG="$(mktemp)"
           {
-            echo "codingenv: bump tracked tool versions to claude=${{ steps.check.outputs.claude }} opencode=${{ steps.check.outputs.opencode }} herdr=${{ steps.check.outputs.herdr }} herdr-studio=${{ steps.check.outputs.herdr-studio }} glab=${{ steps.check.outputs.glab }} tea=${{ steps.check.outputs.tea }} hadolint=${{ steps.check.outputs.hadolint }} yq=${{ steps.check.outputs.yq }} uv=${{ steps.check.outputs.uv }} playwright-mcp=${{ steps.check.outputs.playwright-mcp }}"
+            echo "agent-env: bump tracked tool versions to claude=${{ steps.check.outputs.claude }} opencode=${{ steps.check.outputs.opencode }} herdr=${{ steps.check.outputs.herdr }} herdr-studio=${{ steps.check.outputs.herdr-studio }} glab=${{ steps.check.outputs.glab }} tea=${{ steps.check.outputs.tea }} hadolint=${{ steps.check.outputs.hadolint }} yq=${{ steps.check.outputs.yq }} uv=${{ steps.check.outputs.uv }} playwright-mcp=${{ steps.check.outputs.playwright-mcp }}"
             echo
             echo "CI detected new upstream releases of the preinstalled dev"
             echo "tools and rebuilt the image against them:"
@@ -320,7 +328,7 @@ jobs:
           } > "$MSG"
           # No tool moved -- this rebuild was triggered by a new base image only.
           if [ "${{ steps.check.outputs.changed }}" != true ]; then
-            echo "codingenv: rebuild on updated base image ${{ steps.base.outputs.digest }}" > "$MSG"
+            echo "agent-env: rebuild on updated base image ${{ steps.base.outputs.digest }}" > "$MSG"
           fi
           git commit -F "$MSG"
           rm -f "$MSG"

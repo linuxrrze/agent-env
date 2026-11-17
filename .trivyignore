@@ -1,5 +1,5 @@
-# Trivy vulnerability-ignore list for the codingenv image
-# (used via --ignorefile in .gitea/workflows/codingenv-rebuild.yml).
+# Trivy vulnerability-ignore list for the agent-env image
+# (used via --ignorefile in .github/workflows/build.yml).
 #
 # Three Go DoS CVEs (Added 2026-10-10 in the since-removed claude-env /
 # opencode-env images, carried over 2026-10-23 when gh/glab/tea landed

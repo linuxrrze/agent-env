@@ -45,7 +45,7 @@ if [ "$current_uid" -eq 0 ]; then
   # The mounted home is normally already owned by the host user (= PUID); this
   # only matters when no home is mounted (image-owned dir left at uid 1000).
   chown "$PUID:$PGID" "$HOME_DIR"
-  echo "codingenv: remapped '$SBOX_USER' to uid=$PUID gid=$PGID" >&2
+  echo "agent-env: remapped '$SBOX_USER' to uid=$PUID gid=$PGID" >&2
 
   # Wipe stale /tmp from previous container runs, unless /tmp is its own
   # mount (tmpfs/bind from compose). Without this, agent scratch files would
@@ -106,14 +106,14 @@ if [ "$current_uid" -eq 0 ]; then
         echo "HostKey ${SSH_KEYS_DIR}/ssh_host_${t}_key"
       fi
     done
-  } > /etc/ssh/sshd_config.d/60-codingenv.conf
+  } > /etc/ssh/sshd_config.d/60-agent-env.conf
   # -e sends sshd's logs to stderr (not syslog) so they show up in
   # `docker logs` / compose logs; the container's stderr is the log sink.
   # With -e sshd prints bare messages (no program name), so prefix each line
   # with "sshd: " to tell them apart from the rest of the container's output.
   # sed -u: unbuffered, so lines show up right away.
   /usr/sbin/sshd -D -e 2>&1 | sed -u 's/^/sshd: /' >&2 &
-  echo "codingenv: sshd listening on port ${SSH_PORT} (user: ${SBOX_USER}, pubkey auth)" >&2
+  echo "agent-env: sshd listening on port ${SSH_PORT} (user: ${SBOX_USER}, pubkey auth)" >&2
 else
   echo "::warning:: not running as root; cannot remap user id or start sshd. Set the container to run as root (no 'user:' in compose)." >&2
 fi
@@ -152,7 +152,7 @@ if [ "${HERDR_STUDIO_ENABLED,,}" = "yes" ]; then
   if [ -S "$HERDR_CLIENT_SOCK" ]; then
     as_sandbox roamgate --host 0.0.0.0 --port "$HERDR_STUDIO_PORT" --password "$HERDR_STUDIO_PASSWORD" \
       >/var/log/roamgate.log 2>&1 &
-    echo "codingenv: roamgate (web UI, formerly herdr-studio) on http://0.0.0.0:${HERDR_STUDIO_PORT} (login password: HERDR_STUDIO_PASSWORD, default 'sandbox')" >&2
+    echo "agent-env: roamgate (web UI, formerly herdr-studio) on http://0.0.0.0:${HERDR_STUDIO_PORT} (login password: HERDR_STUDIO_PASSWORD, default 'sandbox')" >&2
   else
     echo "::warning:: ${HERDR_CLIENT_SOCK} not present; roamgate not started (see /var/log/herdr-server.log)" >&2
   fi

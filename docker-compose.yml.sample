@@ -1,7 +1,7 @@
 services:
-  codingenv:
-    image: git.linux-ng.de/marcel/codingenv:latest
-    container_name: codingenv
+  agent-env:
+    image: ghcr.io/linuxrrze/agent-env:latest
+    container_name: agent-env
     restart: no
     # Belt-and-braces zombie reaping: the image already wraps its entrypoint
     # in tini, but init: true makes Docker's own init PID 1 as well, which
@@ -90,8 +90,8 @@ services:
       - /tmp:size=2g
 
     # The container idles by default. Get in and use the tools:
-    #   docker compose exec -u $(id -u):$(id -g) codingenv bash
+    #   docker compose exec -u $(id -u):$(id -g) agent-env bash
     #   ssh -p 2222 sandbox@<host>
     # or run a tool directly:
-    #   docker compose run --rm codingenv claude
-    #   docker compose run --rm codingenv opencode
+    #   docker compose run --rm agent-env claude
+    #   docker compose run --rm agent-env opencode

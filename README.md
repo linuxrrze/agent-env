@@ -1,4 +1,8 @@
-# codingenv
+# agent-env
+
+Formerly `codingenv` in a self-hosted Gitea `docker-images` repo; moved here
+with its history. Image: `ghcr.io/linuxrrze/agent-env` (built and published by
+GitHub Actions).
 
 A self-hosted **code-development sandbox**: an Ubuntu container with a basic
 **Node.js/npm** and **Python** build environment, the **Claude Code**
@@ -35,7 +39,8 @@ Besides the usual build basics (`build-essential`, `git`, `jq`, `ripgrep`,
 ## Deploy
 
 ```sh
-cd codingenv
+git clone https://github.com/linuxrrze/agent-env.git
+cd agent-env
 cp docker-compose.yml.sample docker-compose.yml
 cp .env.sample .env
 ```
@@ -45,7 +50,7 @@ Then edit `.env` (and/or `docker-compose.yml`):
 - `PUID` / `PGID` → your host user's uid/gid (check with `id`). `1000:1000`
   is already the default for the first user on most systems.
 - The home mount → point it at your real home (left side of the `volumes:`
-  entry), e.g. `/home/YOURUSER:/home/sandbox`, or `export HOST_HOME=/home/YOURUSER`.
+  entry), e.g. `/home/YOURUSER:/home/sandbox`, or `export HOST_HOME=$HOME`.
 - Make sure you have an SSH public key in your `~/.ssh/authorized_keys` (the
   mounted home), so you can SSH in — see below.
 
@@ -53,10 +58,10 @@ Then edit `.env` (and/or `docker-compose.yml`):
 docker compose up -d                     # start the sandbox (idles + sshd)
 ssh -p 2222 sandbox@<host-ip>            # drop in over SSH, as yourself
 # or via docker (exec defaults to root, so pass your uid:gid):
-docker compose exec -u $(id -u):$(id -g) codingenv bash
+docker compose exec -u $(id -u):$(id -g) agent-env bash
 # or run a tool directly (claude, opencode, herdr and roamgate are all on PATH):
-docker compose run --rm codingenv claude
-docker compose run --rm codingenv opencode
+docker compose run --rm agent-env claude
+docker compose run --rm agent-env opencode
 # roamgate (formerly Herdr Studio) auto-starts at container start -- see
 # "roamgate web UI (auto-started)" below. Reach it at http://<host-ip>:8787
 # (password: sandbox).
@@ -129,7 +134,7 @@ ssh -p 2222 sandbox@<host-ip>
 - `~/.ssh` must be `700` and `authorized_keys` `600` (ssh `StrictModes`); a
   normal user home already satisfies this.
 - To (not recommended) allow password logins, set `SSH_PASSWORD_AUTH=yes` in
-  `.env` and run `docker compose exec codingenv passwd sandbox`.
+  `.env` and run `docker compose exec agent-env passwd sandbox`.
 
 ## Persisting config, tokens & caches
 
@@ -197,7 +202,7 @@ reachable from here over HTTP, e.g.
 `GLAB_VERSION`, `TEA_VERSION`, `HADOLINT_VERSION`, `YQ_VERSION`, `UV_VERSION`,
 `PLAYWRIGHT_MCP_VERSION` (and the manual `NODE_VERSION` / `NPM_VERSION` pins) live in `.env.sample` (the committed template, copied
 to `.env` locally) and are passed to the build. The CI workflow
-[`.gitea/workflows/codingenv-rebuild.yml`](../.gitea/workflows/codingenv-rebuild.yml):
+[`.github/workflows/build.yml`](.github/workflows/build.yml) (GitHub Actions, image on `ghcr.io/linuxrrze/agent-env`):
 
 - checks nightly for new releases of all ten tools --
   `@anthropic-ai/claude-code` and `opencode-ai` on npm, `herdr` (GitHub
@@ -207,8 +212,8 @@ to `.env` locally) and are passed to the build. The CI workflow
   and when any moves it
   rebuilds, **scans the image with Trivy** (fails on fixable critical/high
   CVEs), pushes, and bumps the tracked versions in
-  `.env.sample` + `.codingenv-version` on its own.
-- always rebuilds on a push to `codingenv/docker/` (even without a version
+  `.env.sample` + `.agent-env-version` on its own.
+- always rebuilds on a push to `docker/` (even without a version
   change).
 
 `gh` (GitHub CLI) is not version-tracked: it comes from GitHub's official apt
