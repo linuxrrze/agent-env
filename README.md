@@ -188,7 +188,8 @@ containers next to this one, joined to its compose network, and are
 reachable from here over HTTP, e.g.
 `http://storytold-mcp:8080/servers/pdfcraft/mcp`. They share
 `/home/sandbox/work` with this container. Setup and client config:
-[`storytold-mcp/README.md`](../storytold-mcp/README.md).
+[linuxrrze/storytold-mcp](https://github.com/linuxrrze/storytold-mcp)
+(images `ghcr.io/linuxrrze/storytold-mcp` and `ghcr.io/linuxrrze/solidcraft-mcp`).
 
 ## Build & version tracking
 
