@@ -6,5 +6,5 @@ glab=1.130.0
 tea=0.16.0
 hadolint=2.15.1
 yq=4.54.3
-uv=0.13.8
+uv=0.13.7
 playwright-mcp=0.0.85
