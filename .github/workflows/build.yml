@@ -35,7 +35,7 @@ jobs:
   check-and-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Determine latest claude + opencode + herdr + herdr-studio + glab + tea + hadolint + yq + uv + playwright-mcp versions
         id: check
