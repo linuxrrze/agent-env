@@ -220,9 +220,16 @@ to `.env` locally) and are passed to the build. The CI workflow
 repo (cli.github.com) and is refreshed to the latest release together with
 the Ubuntu packages on every rebuild.
 
-The image targets **amd64** (the Node tarball and the `herdr` /
-`roamgate` / `glab` / `tea` / `hadolint` / `yq` / `uv` binaries are pinned for
-x86_64). Only claude, opencode, herdr and roamgate make up the image tag; a
+The image is **multi-arch (amd64 + arm64)**: `docker pull` picks the right
+one. CI builds each architecture natively (`ubuntu-latest` and GitHub's
+`ubuntu-24.04-arm` runner, no QEMU), Trivy-scans each, pushes them as the
+staging tags `latest-amd64` / `latest-arm64`, and only once both are clean
+combines them into the version tag, the dated tag and `latest`. The
+Dockerfile picks the Node tarball and the `herdr` / `roamgate` / `glab` /
+`tea` / `hadolint` / `yq` / `uv` release assets for the build's own
+architecture, so a local `docker compose build` works on either.
+
+Only claude, opencode, herdr and roamgate make up the image tag; a
 bump of only the other tools re-publishes the same version tag (the dated tag
 keeps the previous build).
 

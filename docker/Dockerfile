@@ -7,6 +7,10 @@ ENV LANG=C.UTF-8
 # release intact.
 ENV ROAMGATE_DISABLE_UPDATE_CHECK=1
 
+# Multi-arch (amd64 + arm64, built natively per arch by CI): every RUN that
+# downloads a release binary maps `dpkg --print-architecture` to that
+# project's own asset naming and fails on any other architecture.
+#
 # Layers ordered from least to most often changing, each ARG declared right
 # above the one RUN that uses it (a changed ARG value invalidates every RUN
 # after its declaration): a CLI bump -- the common case, near-daily -- only
@@ -101,9 +105,14 @@ RUN << EORUN
 set -euo pipefail
 
 # --- Node.js + npm (official prebuilt binary; pinned & self-contained) -----
+case "$(dpkg --print-architecture)" in
+  amd64) NODE_ARCH=x64 ;;
+  arm64) NODE_ARCH=arm64 ;;
+  *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
+esac
 # Extracted straight into /usr/local so `npm -g` installs land in
 # /usr/local/lib/node_modules with world-executable bins in /usr/local/bin.
-curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz
 tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
 rm -f /tmp/node.tar.xz
 
@@ -120,24 +129,30 @@ ARG HERDR_STUDIO_VERSION=0.7.13
 RUN << EORUN
 set -euo pipefail
 
+case "$(dpkg --print-architecture)" in
+  amd64) HERDR_ARCH=x86_64;  ROAMGATE_ARCH=x64 ;;
+  arm64) HERDR_ARCH=aarch64; ROAMGATE_ARCH=arm64 ;;
+  *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
+esac
+
 # --- herdr (the runtime your coding agents live on), pinned release binary --
-# amd64. Pull the pinned GitHub release binary straight down (no `curl | sh`),
+# Pull the pinned GitHub release binary straight down (no `curl | sh`),
 # mirroring how the Node tarball is handled above for reproducibility.
-curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" -o /usr/local/bin/herdr
+curl -fsSL "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${HERDR_ARCH}" -o /usr/local/bin/herdr
 chmod +x /usr/local/bin/herdr
 
 # --- roamgate (web UI for herdr sessions), pinned release binary ------------
 # Upstream renamed herdr-studio/herdr-gui to roamgate at v0.7.0 (repo
 # powerfooI/roamgate). A standalone binary (embeds its own runtime; no Node or
-# other deps needed at runtime). amd64: pull the pinned GitHub release tarball
+# other deps needed at runtime). Pull the pinned GitHub release tarball
 # (contains roamgate + a VERSION file) and install the binary, mirroring how
 # the Node/herdr archives are handled above for reproducibility. The old
 # herdr-gui name is kept as a symlink for compatibility.
-curl -fsSL "https://github.com/powerfooI/roamgate/releases/download/v${HERDR_STUDIO_VERSION}/roamgate-v${HERDR_STUDIO_VERSION}-linux-x64.tar.xz" -o /tmp/roamgate.tar.xz
-tar -xJf /tmp/roamgate.tar.xz -C /tmp roamgate-linux-x64/roamgate
-install -m 0755 /tmp/roamgate-linux-x64/roamgate /usr/local/bin/roamgate
+curl -fsSL "https://github.com/powerfooI/roamgate/releases/download/v${HERDR_STUDIO_VERSION}/roamgate-v${HERDR_STUDIO_VERSION}-linux-${ROAMGATE_ARCH}.tar.xz" -o /tmp/roamgate.tar.xz
+tar -xJf /tmp/roamgate.tar.xz -C /tmp "roamgate-linux-${ROAMGATE_ARCH}/roamgate"
+install -m 0755 "/tmp/roamgate-linux-${ROAMGATE_ARCH}/roamgate" /usr/local/bin/roamgate
 ln -sf /usr/local/bin/roamgate /usr/local/bin/herdr-gui
-rm -rf /tmp/roamgate.tar.xz /tmp/roamgate-linux-x64
+rm -rf /tmp/roamgate.tar.xz "/tmp/roamgate-linux-${ROAMGATE_ARCH}"
 EORUN
 
 ARG GLAB_VERSION=1.124.0
@@ -148,8 +163,10 @@ set -euo pipefail
 # --- glab (GitLab CLI) + tea (Gitea CLI), pinned release binaries ----------
 # Version-pinned and tracked by CI (like herdr/roamgate above); both are
 # checksum-verified against the release's own published sha256 before
-# install. amd64 only.
-GLAB_TGZ="glab_${GLAB_VERSION}_linux_amd64.tar.gz"
+# install. Both name their assets like dpkg (amd64/arm64).
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in amd64|arm64) ;; *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;; esac
+GLAB_TGZ="glab_${GLAB_VERSION}_linux_${ARCH}.tar.gz"
 curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${GLAB_TGZ}" -o "/tmp/${GLAB_TGZ}"
 curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt" -o /tmp/glab-checksums.txt
 # awk drains the whole file (no early exit); an empty hash makes sha256sum fail.
@@ -158,7 +175,7 @@ tar -xzf "/tmp/${GLAB_TGZ}" -C /tmp bin/glab
 install -m 0755 /tmp/bin/glab /usr/local/bin/glab
 rm -rf "/tmp/${GLAB_TGZ}" /tmp/glab-checksums.txt /tmp/bin
 
-TEA_XZ="tea-${TEA_VERSION}-linux-amd64.xz"
+TEA_XZ="tea-${TEA_VERSION}-linux-${ARCH}.xz"
 curl -fsSL "https://gitea.com/gitea/tea/releases/download/v${TEA_VERSION}/${TEA_XZ}" -o "/tmp/${TEA_XZ}"
 curl -fsSL "https://gitea.com/gitea/tea/releases/download/v${TEA_VERSION}/${TEA_XZ}.sha256" -o /tmp/tea.sha256
 echo "$(cut -d' ' -f1 /tmp/tea.sha256)  /tmp/${TEA_XZ}" | sha256sum -c -
@@ -175,7 +192,7 @@ set -euo pipefail
 
 # --- hadolint, yq (mikefarah), uv: pinned release binaries ----------------
 # Version-pinned and tracked by CI (like glab/tea above), each verified
-# against the release's own published sha256 before install. amd64 only.
+# against the release's own published sha256 before install.
 # From upstream, not Ubuntu: yq is a Go binary (Ubuntu's rebuilds lag Go
 # security fixes -- the Trivy gate), Ubuntu's `yq` package is an unrelated
 # jq wrapper with different syntax, and hadolint is not packaged at all.
@@ -186,26 +203,31 @@ set -euo pipefail
 # Every awk below drains its whole file (no early exit); an empty hash makes
 # sha256sum fail.
 GH=https://github.com
-curl -fsSL "${GH}/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64" -o /tmp/hadolint
+case "$(dpkg --print-architecture)" in
+  amd64) HADOLINT_ARCH=x86_64; YQ_ARCH=amd64; UV_ARCH=x86_64 ;;
+  arm64) HADOLINT_ARCH=arm64;  YQ_ARCH=arm64; UV_ARCH=aarch64 ;;
+  *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
+esac
+curl -fsSL "${GH}/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-${HADOLINT_ARCH}" -o /tmp/hadolint
 curl -fsSL "${GH}/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/checksums.sha256" -o /tmp/hadolint.sums
-echo "$(awk '$2=="*hadolint-linux-x86_64" || $2=="hadolint-linux-x86_64"{print $1}' /tmp/hadolint.sums)  /tmp/hadolint" | sha256sum -c -
+echo "$(awk -v f="hadolint-linux-${HADOLINT_ARCH}" '$2=="*"f || $2==f{print $1}' /tmp/hadolint.sums)  /tmp/hadolint" | sha256sum -c -
 install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
 rm -f /tmp/hadolint /tmp/hadolint.sums
 
-curl -fsSL "${GH}/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o /tmp/yq
-# checksums-bsd lines: `SHA256 (yq_linux_amd64) = <hash>`
+curl -fsSL "${GH}/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${YQ_ARCH}" -o /tmp/yq
+# checksums-bsd lines: `SHA256 (yq_linux_<arch>) = <hash>`
 curl -fsSL "${GH}/mikefarah/yq/releases/download/v${YQ_VERSION}/checksums-bsd" -o /tmp/yq.sums
-echo "$(awk '$1=="SHA256" && $2=="(yq_linux_amd64)"{print $4}' /tmp/yq.sums)  /tmp/yq" | sha256sum -c -
+echo "$(awk -v f="(yq_linux_${YQ_ARCH})" '$1=="SHA256" && $2==f{print $4}' /tmp/yq.sums)  /tmp/yq" | sha256sum -c -
 install -m 0755 /tmp/yq /usr/local/bin/yq
 rm -f /tmp/yq /tmp/yq.sums
 
-UV_TGZ=uv-x86_64-unknown-linux-gnu.tar.gz
+UV_TGZ="uv-${UV_ARCH}-unknown-linux-gnu.tar.gz"
 curl -fsSL "${GH}/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TGZ}" -o "/tmp/${UV_TGZ}"
 curl -fsSL "${GH}/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TGZ}.sha256" -o /tmp/uv.sha256
 echo "$(cut -d' ' -f1 /tmp/uv.sha256)  /tmp/${UV_TGZ}" | sha256sum -c -
 tar -xzf "/tmp/${UV_TGZ}" -C /tmp
-install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/
-rm -rf "/tmp/${UV_TGZ}" /tmp/uv.sha256 /tmp/uv-x86_64-unknown-linux-gnu
+install -m 0755 "/tmp/uv-${UV_ARCH}-unknown-linux-gnu/uv" "/tmp/uv-${UV_ARCH}-unknown-linux-gnu/uvx" /usr/local/bin/
+rm -rf "/tmp/${UV_TGZ}" /tmp/uv.sha256 "/tmp/uv-${UV_ARCH}-unknown-linux-gnu"
 EORUN
 
 # Shared, image-wide browser dir: Playwright's default (~/.cache/ms-playwright)

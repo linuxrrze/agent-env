@@ -12,12 +12,20 @@
 # release into $HOME/.local/bin (once per runner; reused if the same version
 # is already there) and verifies the tarball against the sha256 recorded
 # below -- instead of piping the unpinned install.sh from Trivy's main branch
-# into sh in every workflow. To upgrade: bump TRIVY_VERSION and TRIVY_SHA256
-# (from the release's trivy_<v>_checksums.txt, Linux-64bit.tar.gz line).
+# into sh in every workflow. Works on x86_64 and arm64 runners. To upgrade:
+# bump TRIVY_VERSION and both TRIVY_SHA256_* (from the release's
+# trivy_<v>_checksums.txt, Linux-64bit.tar.gz and Linux-ARM64.tar.gz lines).
 set -euo pipefail
 
 TRIVY_VERSION=0.76.2
-TRIVY_SHA256=bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+TRIVY_SHA256_64bit=bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+TRIVY_SHA256_ARM64=ab9d51f86e6a5fb936f605faff6b593ac51bc378fff4d3e8b9d58358b9c367c3
+
+case "$(uname -m)" in
+  x86_64)        TRIVY_ARCH=64bit; TRIVY_SHA256=$TRIVY_SHA256_64bit ;;
+  aarch64|arm64) TRIVY_ARCH=ARM64; TRIVY_SHA256=$TRIVY_SHA256_ARM64 ;;
+  *) echo "trivy-scan: unsupported runner architecture $(uname -m)" >&2; exit 1 ;;
+esac
 
 [ $# -ge 1 ] || { echo "usage: $0 <image:tag> [extra trivy image args...]" >&2; exit 2; }
 IMAGE=$1
@@ -32,7 +40,7 @@ case "$INSTALLED" in
   *)
     TMP=$(mktemp -d)
     trap 'rm -rf "$TMP"' EXIT
-    TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+    TARBALL="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz"
     curl -sSfL -o "$TMP/$TARBALL" \
       "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/$TARBALL"
     echo "$TRIVY_SHA256  $TMP/$TARBALL" | sha256sum -c --quiet - \

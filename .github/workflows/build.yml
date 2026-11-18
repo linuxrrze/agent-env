@@ -31,9 +31,45 @@ permissions:
   contents: write   # "Record built version" pushes the version/digest bump
   packages: write   # push to ghcr.io
 
+# One run at a time: the per-arch staging tags (latest-amd64/latest-arm64)
+# are shared, and a second run must not re-point them while the first one
+# is still assembling its multi-arch tags from them.
+concurrency:
+  group: agent-env-build
+  cancel-in-progress: false
+
 jobs:
-  check-and-build:
+  # Upstream versions + base digest, once for both architectures.
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      claude: ${{ steps.check.outputs.claude }}
+      opencode: ${{ steps.check.outputs.opencode }}
+      herdr: ${{ steps.check.outputs.herdr }}
+      herdr-studio: ${{ steps.check.outputs.herdr-studio }}
+      glab: ${{ steps.check.outputs.glab }}
+      tea: ${{ steps.check.outputs.tea }}
+      hadolint: ${{ steps.check.outputs.hadolint }}
+      yq: ${{ steps.check.outputs.yq }}
+      uv: ${{ steps.check.outputs.uv }}
+      playwright-mcp: ${{ steps.check.outputs.playwright-mcp }}
+      node: ${{ steps.check.outputs.node }}
+      npm: ${{ steps.check.outputs.npm }}
+      tag: ${{ steps.check.outputs.tag }}
+      claude_prev: ${{ steps.check.outputs.claude_prev }}
+      opencode_prev: ${{ steps.check.outputs.opencode_prev }}
+      herdr_prev: ${{ steps.check.outputs.herdr_prev }}
+      herdr-studio_prev: ${{ steps.check.outputs.herdr-studio_prev }}
+      glab_prev: ${{ steps.check.outputs.glab_prev }}
+      tea_prev: ${{ steps.check.outputs.tea_prev }}
+      hadolint_prev: ${{ steps.check.outputs.hadolint_prev }}
+      yq_prev: ${{ steps.check.outputs.yq_prev }}
+      uv_prev: ${{ steps.check.outputs.uv_prev }}
+      playwright-mcp_prev: ${{ steps.check.outputs.playwright-mcp_prev }}
+      changed: ${{ steps.check.outputs.changed }}
+      digest: ${{ steps.base.outputs.digest }}
+      build: ${{ steps.decide.outputs.build }}
+      date: ${{ steps.decide.outputs.date }}
     steps:
       - uses: actions/checkout@v5
 
@@ -189,41 +225,71 @@ jobs:
 
       # Build on a version change, and also on push / manual dispatch (so
       # editing the Dockerfile/entrypoint always rebuilds) -- only the nightly
-      # cron skips when nothing upstream changed.
+      # cron skips when nothing upstream changed. The date is fixed here so
+      # both architectures (and the dated tag) use the same day even if the
+      # run crosses midnight.
+      - name: Decide whether to build
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" != schedule ] || [ "${{ steps.check.outputs.changed }}" = true ] || [ "${{ steps.base.outputs.changed }}" = true ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+  # Native build per architecture (no QEMU: the npm installs and the
+  # Playwright smoke test would crawl under emulation). Each leg builds,
+  # adds the banner, Trivy-scans its own image and pushes it as the moving
+  # staging tag latest-<arch>; the publish job assembles the multi-arch tags.
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm   # free for public repos
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
       - name: Build image
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           # --no-cache: --pull only refreshes the base layer. With an
           # unchanged base digest the cached apt layer (update/dist-upgrade/
           # install) would be reused, so archive security fixes for packages
           # not in the base would never land.
           docker build --pull --no-cache \
-            --build-arg APT_REFRESH="$(date -u +%Y%m%d)" \
-            --build-arg NODE_VERSION="${{ steps.check.outputs.node }}" \
-            --build-arg NPM_VERSION="${{ steps.check.outputs.npm }}" \
-            --build-arg CLAUDE_VERSION="${{ steps.check.outputs.claude }}" \
-            --build-arg OPENCODE_VERSION="${{ steps.check.outputs.opencode }}" \
-            --build-arg HERDR_VERSION="${{ steps.check.outputs.herdr }}" \
-            --build-arg HERDR_STUDIO_VERSION="${{ steps.check.outputs.herdr-studio }}" \
-            --build-arg GLAB_VERSION="${{ steps.check.outputs.glab }}" \
-            --build-arg TEA_VERSION="${{ steps.check.outputs.tea }}" \
-            --build-arg HADOLINT_VERSION="${{ steps.check.outputs.hadolint }}" \
-            --build-arg YQ_VERSION="${{ steps.check.outputs.yq }}" \
-            --build-arg UV_VERSION="${{ steps.check.outputs.uv }}" \
-            --build-arg PLAYWRIGHT_MCP_VERSION="${{ steps.check.outputs.playwright-mcp }}" \
-            -t "$IMAGE:${{ steps.check.outputs.tag }}" \
-            -t "$IMAGE:latest" \
+            --build-arg APT_REFRESH="${{ needs.check.outputs.date }}" \
+            --build-arg NODE_VERSION="${{ needs.check.outputs.node }}" \
+            --build-arg NPM_VERSION="${{ needs.check.outputs.npm }}" \
+            --build-arg CLAUDE_VERSION="${{ needs.check.outputs.claude }}" \
+            --build-arg OPENCODE_VERSION="${{ needs.check.outputs.opencode }}" \
+            --build-arg HERDR_VERSION="${{ needs.check.outputs.herdr }}" \
+            --build-arg HERDR_STUDIO_VERSION="${{ needs.check.outputs.herdr-studio }}" \
+            --build-arg GLAB_VERSION="${{ needs.check.outputs.glab }}" \
+            --build-arg TEA_VERSION="${{ needs.check.outputs.tea }}" \
+            --build-arg HADOLINT_VERSION="${{ needs.check.outputs.hadolint }}" \
+            --build-arg YQ_VERSION="${{ needs.check.outputs.yq }}" \
+            --build-arg UV_VERSION="${{ needs.check.outputs.uv }}" \
+            --build-arg PLAYWRIGHT_MCP_VERSION="${{ needs.check.outputs.playwright-mcp }}" \
+            -t "$IMAGE:${{ needs.check.outputs.tag }}" \
+            -t "$IMAGE:latest-${{ matrix.arch }}" \
             --label org.opencontainers.image.source=https://github.com/linuxrrze/agent-env \
             docker
 
       # Startup banner (image name + version, figlet style) as a thin layer
       # on top of the built image, same tags -- see .github/scripts/add-banner.sh.
+      # The first tag gives the banner text (the version tag, not latest-<arch>).
       - name: Add startup banner
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           bash .github/scripts/add-banner.sh \
-            "$IMAGE:${{ steps.check.outputs.tag }}" \
-            "$IMAGE:latest"
+            "$IMAGE:${{ needs.check.outputs.tag }}" \
+            "$IMAGE:latest-${{ matrix.arch }}"
 
       # Fail the publish on a fixable CRITICAL/HIGH CVE (OS packages + the
       # bundled npm/python deps + the herdr / roamgate / gh / glab / tea / hadolint / yq / uv binaries + the Playwright npm packages
@@ -244,57 +310,76 @@ jobs:
       #   ignored: the image replaces Node's npm with the NPM_VERSION pin
       #   (.env.sample) -- bump that when the scan flags them.
       - name: Security scan (Trivy)
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           set -euo pipefail
-          bash .github/scripts/trivy-scan.sh "$IMAGE:latest" \
+          bash .github/scripts/trivy-scan.sh "$IMAGE:latest-${{ matrix.arch }}" \
             --skip-files '**/ssh_host_*_key' \
             --ignorefile .trivyignore
 
-      - name: Push image
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
+      - name: Push staging tag
         env:
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
             -u "$REGISTRY_USER" --password-stdin
-          docker push "$IMAGE:${{ steps.check.outputs.tag }}"
-          # Dated tag next to the moving version tag: a rebuild (push, base
-          # update) re-publishes the same version tag, this keeps the
-          # previous build pullable for a rollback.
-          DATED="$IMAGE:${{ steps.check.outputs.tag }}-$(date -u +%Y%m%d)"
-          docker tag "$IMAGE:${{ steps.check.outputs.tag }}" "$DATED"
-          docker push "$DATED"
-          docker push "$IMAGE:latest"
+          docker push "$IMAGE:latest-${{ matrix.arch }}"
+
+  # Both architectures built and scanned clean: publish the multi-arch tags,
+  # then record the versions.
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Push multi-arch image
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
+            -u "$REGISTRY_USER" --password-stdin
+          # Version tag, dated tag and latest all point at one manifest list
+          # (amd64 + arm64). The dated tag next to the moving version tag: a
+          # rebuild (push, base update) re-publishes the same version tag,
+          # this keeps the previous build pullable for a rollback.
+          TAG="${{ needs.check.outputs.tag }}"
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=https://github.com/linuxrrze/agent-env" \
+            -t "$IMAGE:$TAG" \
+            -t "$IMAGE:$TAG-${{ needs.check.outputs.date }}" \
+            -t "$IMAGE:latest" \
+            "$IMAGE:latest-amd64" "$IMAGE:latest-arm64"
+          docker buildx imagetools inspect "$IMAGE:latest"
 
       - name: Record built version
-        if: github.event_name != 'schedule' || steps.check.outputs.changed == 'true' || steps.base.outputs.changed == 'true'
         run: |
           {
-            echo "claude=${{ steps.check.outputs.claude }}"
-            echo "opencode=${{ steps.check.outputs.opencode }}"
-            echo "herdr=${{ steps.check.outputs.herdr }}"
-            echo "herdr-studio=${{ steps.check.outputs.herdr-studio }}"
-            echo "glab=${{ steps.check.outputs.glab }}"
-            echo "tea=${{ steps.check.outputs.tea }}"
-            echo "hadolint=${{ steps.check.outputs.hadolint }}"
-            echo "yq=${{ steps.check.outputs.yq }}"
-            echo "uv=${{ steps.check.outputs.uv }}"
-            echo "playwright-mcp=${{ steps.check.outputs.playwright-mcp }}"
+            echo "claude=${{ needs.check.outputs.claude }}"
+            echo "opencode=${{ needs.check.outputs.opencode }}"
+            echo "herdr=${{ needs.check.outputs.herdr }}"
+            echo "herdr-studio=${{ needs.check.outputs.herdr-studio }}"
+            echo "glab=${{ needs.check.outputs.glab }}"
+            echo "tea=${{ needs.check.outputs.tea }}"
+            echo "hadolint=${{ needs.check.outputs.hadolint }}"
+            echo "yq=${{ needs.check.outputs.yq }}"
+            echo "uv=${{ needs.check.outputs.uv }}"
+            echo "playwright-mcp=${{ needs.check.outputs.playwright-mcp }}"
           } > "$VERSION_FILE"
-          echo "${{ steps.base.outputs.digest }}" > "$BASE_DIGEST_FILE"
+          echo "${{ needs.check.outputs.digest }}" > "$BASE_DIGEST_FILE"
           # keep .env.sample (template for the local .env) in sync
-          sed -i "s/^CLAUDE_VERSION=.*/CLAUDE_VERSION=${{ steps.check.outputs.claude }}/" "$ENV_FILE"
-          sed -i "s/^OPENCODE_VERSION=.*/OPENCODE_VERSION=${{ steps.check.outputs.opencode }}/" "$ENV_FILE"
-          sed -i "s/^HERDR_VERSION=.*/HERDR_VERSION=${{ steps.check.outputs.herdr }}/" "$ENV_FILE"
-          sed -i "s/^HERDR_STUDIO_VERSION=.*/HERDR_STUDIO_VERSION=${{ steps.check.outputs.herdr-studio }}/" "$ENV_FILE"
-          sed -i "s/^GLAB_VERSION=.*/GLAB_VERSION=${{ steps.check.outputs.glab }}/" "$ENV_FILE"
-          sed -i "s/^TEA_VERSION=.*/TEA_VERSION=${{ steps.check.outputs.tea }}/" "$ENV_FILE"
-          sed -i "s/^HADOLINT_VERSION=.*/HADOLINT_VERSION=${{ steps.check.outputs.hadolint }}/" "$ENV_FILE"
-          sed -i "s/^YQ_VERSION=.*/YQ_VERSION=${{ steps.check.outputs.yq }}/" "$ENV_FILE"
-          sed -i "s/^UV_VERSION=.*/UV_VERSION=${{ steps.check.outputs.uv }}/" "$ENV_FILE"
-          sed -i "s/^PLAYWRIGHT_MCP_VERSION=.*/PLAYWRIGHT_MCP_VERSION=${{ steps.check.outputs.playwright-mcp }}/" "$ENV_FILE"
+          sed -i "s/^CLAUDE_VERSION=.*/CLAUDE_VERSION=${{ needs.check.outputs.claude }}/" "$ENV_FILE"
+          sed -i "s/^OPENCODE_VERSION=.*/OPENCODE_VERSION=${{ needs.check.outputs.opencode }}/" "$ENV_FILE"
+          sed -i "s/^HERDR_VERSION=.*/HERDR_VERSION=${{ needs.check.outputs.herdr }}/" "$ENV_FILE"
+          sed -i "s/^HERDR_STUDIO_VERSION=.*/HERDR_STUDIO_VERSION=${{ needs.check.outputs.herdr-studio }}/" "$ENV_FILE"
+          sed -i "s/^GLAB_VERSION=.*/GLAB_VERSION=${{ needs.check.outputs.glab }}/" "$ENV_FILE"
+          sed -i "s/^TEA_VERSION=.*/TEA_VERSION=${{ needs.check.outputs.tea }}/" "$ENV_FILE"
+          sed -i "s/^HADOLINT_VERSION=.*/HADOLINT_VERSION=${{ needs.check.outputs.hadolint }}/" "$ENV_FILE"
+          sed -i "s/^YQ_VERSION=.*/YQ_VERSION=${{ needs.check.outputs.yq }}/" "$ENV_FILE"
+          sed -i "s/^UV_VERSION=.*/UV_VERSION=${{ needs.check.outputs.uv }}/" "$ENV_FILE"
+          sed -i "s/^PLAYWRIGHT_MCP_VERSION=.*/PLAYWRIGHT_MCP_VERSION=${{ needs.check.outputs.playwright-mcp }}/" "$ENV_FILE"
           git add "$VERSION_FILE" "$BASE_DIGEST_FILE" "$ENV_FILE"
           # A push-triggered rebuild with no upstream change writes identical
           # content -- only commit/push when a version actually moved.
@@ -308,27 +393,27 @@ jobs:
           # per the repo convention (avoids -m quoting pitfalls).
           MSG="$(mktemp)"
           {
-            echo "agent-env: bump tracked tool versions to claude=${{ steps.check.outputs.claude }} opencode=${{ steps.check.outputs.opencode }} herdr=${{ steps.check.outputs.herdr }} herdr-studio=${{ steps.check.outputs.herdr-studio }} glab=${{ steps.check.outputs.glab }} tea=${{ steps.check.outputs.tea }} hadolint=${{ steps.check.outputs.hadolint }} yq=${{ steps.check.outputs.yq }} uv=${{ steps.check.outputs.uv }} playwright-mcp=${{ steps.check.outputs.playwright-mcp }}"
+            echo "agent-env: bump tracked tool versions to claude=${{ needs.check.outputs.claude }} opencode=${{ needs.check.outputs.opencode }} herdr=${{ needs.check.outputs.herdr }} herdr-studio=${{ needs.check.outputs.herdr-studio }} glab=${{ needs.check.outputs.glab }} tea=${{ needs.check.outputs.tea }} hadolint=${{ needs.check.outputs.hadolint }} yq=${{ needs.check.outputs.yq }} uv=${{ needs.check.outputs.uv }} playwright-mcp=${{ needs.check.outputs.playwright-mcp }}"
             echo
             echo "CI detected new upstream releases of the preinstalled dev"
             echo "tools and rebuilt the image against them:"
-            echo "  - @anthropic-ai/claude-code: ${{ steps.check.outputs.claude_prev }} -> ${{ steps.check.outputs.claude }}"
-            echo "  - opencode-ai:               ${{ steps.check.outputs.opencode_prev }} -> ${{ steps.check.outputs.opencode }}"
-            echo "  - herdr (GitHub release):    ${{ steps.check.outputs.herdr_prev }} -> ${{ steps.check.outputs.herdr }}"
-            echo "  - herdr-studio (GitHub release): ${{ steps.check.outputs.herdr-studio_prev }} -> ${{ steps.check.outputs.herdr-studio }}"
-            echo "  - glab (GitLab release):     ${{ steps.check.outputs.glab_prev }} -> ${{ steps.check.outputs.glab }}"
-            echo "  - tea (Gitea release):       ${{ steps.check.outputs.tea_prev }} -> ${{ steps.check.outputs.tea }}"
-            echo "  - hadolint (GitHub release): ${{ steps.check.outputs.hadolint_prev }} -> ${{ steps.check.outputs.hadolint }}"
-            echo "  - yq (GitHub release):       ${{ steps.check.outputs.yq_prev }} -> ${{ steps.check.outputs.yq }}"
-            echo "  - uv (GitHub release):       ${{ steps.check.outputs.uv_prev }} -> ${{ steps.check.outputs.uv }}"
-            echo "  - @playwright/mcp (npm):     ${{ steps.check.outputs.playwright-mcp_prev }} -> ${{ steps.check.outputs.playwright-mcp }}"
+            echo "  - @anthropic-ai/claude-code: ${{ needs.check.outputs.claude_prev }} -> ${{ needs.check.outputs.claude }}"
+            echo "  - opencode-ai:               ${{ needs.check.outputs.opencode_prev }} -> ${{ needs.check.outputs.opencode }}"
+            echo "  - herdr (GitHub release):    ${{ needs.check.outputs.herdr_prev }} -> ${{ needs.check.outputs.herdr }}"
+            echo "  - herdr-studio (GitHub release): ${{ needs.check.outputs.herdr-studio_prev }} -> ${{ needs.check.outputs.herdr-studio }}"
+            echo "  - glab (GitLab release):     ${{ needs.check.outputs.glab_prev }} -> ${{ needs.check.outputs.glab }}"
+            echo "  - tea (Gitea release):       ${{ needs.check.outputs.tea_prev }} -> ${{ needs.check.outputs.tea }}"
+            echo "  - hadolint (GitHub release): ${{ needs.check.outputs.hadolint_prev }} -> ${{ needs.check.outputs.hadolint }}"
+            echo "  - yq (GitHub release):       ${{ needs.check.outputs.yq_prev }} -> ${{ needs.check.outputs.yq }}"
+            echo "  - uv (GitHub release):       ${{ needs.check.outputs.uv_prev }} -> ${{ needs.check.outputs.uv }}"
+            echo "  - @playwright/mcp (npm):     ${{ needs.check.outputs.playwright-mcp_prev }} -> ${{ needs.check.outputs.playwright-mcp }}"
             echo
             echo "Rebuilt, Trivy-scanned (no fixable critical/high CVEs), and"
-            echo "pushed $IMAGE:${{ steps.check.outputs.tag }} and $IMAGE:latest."
+            echo "pushed $IMAGE:${{ needs.check.outputs.tag }} and $IMAGE:latest (amd64 + arm64)."
           } > "$MSG"
           # No tool moved -- this rebuild was triggered by a new base image only.
-          if [ "${{ steps.check.outputs.changed }}" != true ]; then
-            echo "agent-env: rebuild on updated base image ${{ steps.base.outputs.digest }}" > "$MSG"
+          if [ "${{ needs.check.outputs.changed }}" != true ]; then
+            echo "agent-env: rebuild on updated base image ${{ needs.check.outputs.digest }}" > "$MSG"
           fi
           git commit -F "$MSG"
           rm -f "$MSG"
