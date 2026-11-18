@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# ^ Pins the current Dockerfile frontend: the RUN heredocs below need it, and
+#   the docker on GitHub's ubuntu-24.04-arm runner has an older built-in one
+#   ("unknown instruction: set").
 FROM ubuntu:26.04
 
 # UTF-8 without needing the `locales` package/locale-gen
